@@ -30,7 +30,7 @@ export const HomeDashboard: React.FC<{ onNavigate?: (view: string) => void }> = 
   }, []);
 
   // Get today's date components
-  const getDateInfo = useMemo(() => {
+  const dateInfo = useMemo(() => {
     const now = new Date();
     return {
       day: now.getDate(),
@@ -229,11 +229,11 @@ export const HomeDashboard: React.FC<{ onNavigate?: (view: string) => void }> = 
           </div>
           
           <div className="date-section">
-            <div className="date-day">{getDateInfo().day}</div>
+            <div className="date-day">{dateInfo.day}</div>
             <div>
-              <span className="date-weekday">{getDateInfo().weekday}</span>
+              <span className="date-weekday">{dateInfo.weekday}</span>
               <br />
-              <span className="date-month">{getDateInfo().month}</span>
+              <span className="date-month">{dateInfo.month}</span>
             </div>
           </div>
         </div>

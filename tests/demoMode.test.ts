@@ -1,59 +1,72 @@
-/**
- * Demo Mode Security Boundary Tests
- * 
- * These tests verify that demo mode:
- * - Is disabled by default
- * - Requires explicit VITE_DEMO_MODE=true to activate
- * - Does not bypass Firebase Auth
- * - Does not enable demo login in production
- */
-
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-// Mock import.meta.env
-const mockEnv = (demoMode?: string) => {
-  vi.stubGlobal('import.meta', {
-    env: {
-      VITE_DEMO_MODE: demoMode,
-    },
-  });
-};
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('Demo Mode Security Boundary', () => {
+  // Store reference to reset after each test
+  let originalImportMeta: any;
+
   beforeEach(() => {
+    // Save original import.meta if it exists
+    originalImportMeta = globalThis.import.meta;
+    // Clear module cache
     vi.resetModules();
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    // Restore original import.meta
+    if (originalImportMeta !== undefined) {
+      (globalThis as any).import.meta = originalImportMeta;
+    } else {
+      delete (globalThis as any).import.meta;
+    }
+    vi.restoreAllMocks();
   });
 
   describe('isDemoModeEnabled', () => {
     it('returns false when VITE_DEMO_MODE is undefined', async () => {
-      mockEnv(undefined);
-      // Reset module cache to pick up new env
+      // Mock import.meta.env
+      (globalThis as any).import.meta = {
+        env: {
+          VITE_DEMO_MODE: undefined,
+        },
+      };
+
+      // Reset module cache to ensure fresh import with the mocked env
       vi.resetModules();
       const { isDemoModeEnabled } = await import('../src/demo/demoConfig');
       expect(isDemoModeEnabled()).toBe(false);
     });
 
     it('returns false when VITE_DEMO_MODE is empty string', async () => {
-      mockEnv('');
+      (globalThis as any).import.meta = {
+        env: {
+          VITE_DEMO_MODE: '',
+        },
+      };
+
       vi.resetModules();
       const { isDemoModeEnabled } = await import('../src/demo/demoConfig');
       expect(isDemoModeEnabled()).toBe(false);
     });
 
     it('returns false when VITE_DEMO_MODE is "false"', async () => {
-      mockEnv('false');
+      (globalThis as any).import.meta = {
+        env: {
+          VITE_DEMO_MODE: 'false',
+        },
+      };
+
       vi.resetModules();
       const { isDemoModeEnabled } = await import('../src/demo/demoConfig');
       expect(isDemoModeEnabled()).toBe(false);
     });
 
-    it('returns true only when VITE_DEMO_MODE is "true"', async () => {
-      mockEnv('true');
-      // Clear module cache and re-import
+    it('returns true when VITE_DEMO_MODE is "true"', async () => {
+      (globalThis as any).import.meta = {
+        env: {
+          VITE_DEMO_MODE: 'true',
+        },
+      };
+
       vi.resetModules();
       const { isDemoModeEnabled } = await import('../src/demo/demoConfig');
       expect(isDemoModeEnabled()).toBe(true);
@@ -61,12 +74,13 @@ describe('Demo Mode Security Boundary', () => {
 
     it('does NOT enable demo mode based on NODE_ENV', async () => {
       // Even if NODE_ENV is development, demo mode requires explicit flag
-      vi.stubGlobal('import.meta', {
+      (globalThis as any).import.meta = {
         env: {
           VITE_DEMO_MODE: undefined,
           NODE_ENV: 'development',
         },
-      });
+      };
+
       vi.resetModules();
       const { isDemoModeEnabled } = await import('../src/demo/demoConfig');
       expect(isDemoModeEnabled()).toBe(false);
@@ -75,14 +89,19 @@ describe('Demo Mode Security Boundary', () => {
 
   describe('Demo User Identity', () => {
     it('uses clearly synthetic identity that never overlaps with real Firebase accounts', async () => {
-      mockEnv('true');
+      (globalThis as any).import.meta = {
+        env: {
+          VITE_DEMO_MODE: 'true',
+        },
+      };
+
       vi.resetModules();
       const { DEMO_USER } = await import('../src/demo/demoConfig');
-      
+
       expect(DEMO_USER.uid).toBe('demo-user-local-preview');
       expect(DEMO_USER.email).toBe('demo@reflectra.local');
       expect(DEMO_USER.displayName).toBe('Alex Morgan');
-      
+
       // Verify synthetic nature
       expect(DEMO_USER.email).toContain('demo@');
       expect(DEMO_USER.email).toContain('.local');
@@ -93,10 +112,15 @@ describe('Demo Mode Security Boundary', () => {
 
   describe('Demo Data Isolation', () => {
     it('stores demo data in namespaced localStorage key', async () => {
-      mockEnv('true');
+      (globalThis as any).import.meta = {
+        env: {
+          VITE_DEMO_MODE: 'true',
+        },
+      };
+
       vi.resetModules();
       const { DEMO_STORAGE_KEY } = await import('../src/demo/demoConfig');
-      
+
       expect(DEMO_STORAGE_KEY).toBe('reflectra-demo-workspace');
       expect(DEMO_STORAGE_KEY).toContain('demo');
     });
@@ -105,25 +129,25 @@ describe('Demo Mode Security Boundary', () => {
   describe('Production Safety', () => {
     it('demo mode CTA must NOT appear in production build', async () => {
       // Simulate production environment
-      vi.stubGlobal('import.meta', {
+      (globalThis as any).import.meta = {
         env: {
           VITE_DEMO_MODE: undefined,
           NODE_ENV: 'production',
         },
-      });
+      };
+
       vi.resetModules();
-      
       const { isDemoModeEnabled } = await import('../src/demo/demoConfig');
       expect(isDemoModeEnabled()).toBe(false);
     });
 
     it('demo mode must be explicitly enabled, never auto-detected', async () => {
       // No environment variables set
-      vi.stubGlobal('import.meta', {
+      (globalThis as any).import.meta = {
         env: {},
-      });
+      };
+
       vi.resetModules();
-      
       const { isDemoModeEnabled } = await import('../src/demo/demoConfig');
       expect(isDemoModeEnabled()).toBe(false);
     });
@@ -131,24 +155,52 @@ describe('Demo Mode Security Boundary', () => {
 });
 
 describe('Demo Mode Integration Constraints', () => {
+  let originalImportMeta: any;
+
+  beforeEach(() => {
+    // Save original import.meta if it exists
+    originalImportMeta = globalThis.import.meta;
+    // Clear module cache
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    // Restore original import.meta
+    if (originalImportMeta !== undefined) {
+      (globalThis as any).import.meta = originalImportMeta;
+    } else {
+      delete (globalThis as any).import.meta;
+    }
+    vi.restoreAllMocks();
+  });
+
   it('verifies demo mode does NOT call Firebase Auth', async () => {
     // This is a design constraint verification
     // Demo mode should work entirely without Firebase
-    mockEnv('true');
+    (globalThis as any).import.meta = {
+      env: {
+        VITE_DEMO_MODE: 'true',
+      },
+    };
+
     vi.resetModules();
-    
     const { DEMO_USER } = await import('../src/demo/demoConfig');
-    
+
     // Demo user is synthetic, not from Firebase
     expect(DEMO_USER.uid).not.toMatch(/^[a-zA-Z0-9]{28}$/); // Firebase UID format
     expect(DEMO_USER.email).not.toMatch(/@gmail\.com$/); // Real email pattern
   });
 
   it('verifies demo workspace key is isolated from production keys', async () => {
-    mockEnv('true');
+    (globalThis as any).import.meta = {
+      env: {
+        VITE_DEMO_MODE: 'true',
+      },
+    };
+
     vi.resetModules();
     const { DEMO_STORAGE_KEY } = await import('../src/demo/demoConfig');
-    
+
     // Must be namespaced to avoid collision
     expect(DEMO_STORAGE_KEY.startsWith('reflectra-demo')).toBe(true);
     expect(DEMO_STORAGE_KEY).not.toBe('reflectra-user');
