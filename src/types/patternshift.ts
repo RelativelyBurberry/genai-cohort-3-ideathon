@@ -1,3 +1,5 @@
+import type { PatternIntelligence } from '../intelligence/patternAnalysis';
+
 export interface PatternShiftTimeRange {
   start: string;
   end: string;
@@ -58,6 +60,11 @@ export interface PatternShiftInsight {
   metrics: PatternShiftMetrics;
   observations: string[];
   suggestedInquiries: string[];
+  /**
+   * Phase 10 extended deterministic intelligence. Present on insights
+   * generated after Phase 10; older persisted insights may be null.
+   */
+  intelligence?: PatternIntelligence | null;
   type: 'patternshift';
 }
 

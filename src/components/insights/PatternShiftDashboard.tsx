@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   Sparkles,
   TrendingUp,
+  TrendingDown,
   Calendar,
   Layers,
   HelpCircle,
@@ -15,11 +16,500 @@ import {
   CheckCircle2,
   Info,
   ChevronRight,
+  Activity,
+  ChevronDown,
+  Clock,
+  MapPin,
+  Moon,
+  Sunrise,
+  Sun,
+  Sunset,
+  Shuffle,
+  Route,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useDemo, useIsDemoSession } from '../../demo';
 import { fetchLatestInsight, triggerPatternAnalysis } from '../../services/patternShiftService';
 import type { PatternShiftInsight, PatternShiftResponse } from '../../types/patternshift';
+import { TIME_BUCKET_DISPLAY } from '../../intelligence/patternAnalysis';
+import type {
+  PatternIntelligence,
+  PatternEvidence,
+  MoodTrajectoryResult,
+  ReflectionRhythmResult,
+  ReflectionFrequencyResult,
+  ThemeEvolutionResult,
+  UnusualTimingResult,
+  LocationPatternsResult,
+} from '../../intelligence/patternAnalysis';
+
+// ---------------------------------------------------------------------------
+// Phase 10: Evidence-Grounded Intelligence sections
+// Every surfaced pattern carries a "Why am I seeing this?" disclosure that
+// answers how many reflections contributed and how the observation was
+// computed — never exposing raw private content.
+// ---------------------------------------------------------------------------
+
+const BUCKET_ORDER: ReadonlyArray<'night' | 'morning' | 'afternoon' | 'evening'> = [
+  'night',
+  'morning',
+  'afternoon',
+  'evening',
+];
+
+const BUCKET_ICONS: Record<string, React.ReactNode> = {
+  night: <Moon className="w-3.5 h-3.5" />,
+  morning: <Sunrise className="w-3.5 h-3.5" />,
+  afternoon: <Sun className="w-3.5 h-3.5" />,
+  evening: <Sunset className="w-3.5 h-3.5" />,
+};
+
+const MOOD_TRAJECTORY_PRESENTATION: Record<string, { label: string; icon: React.ReactNode }> = {
+  upward: { label: 'Generally Upward', icon: <ArrowUpRight className="w-4 h-4" /> },
+  downward: { label: 'Shifting Lower', icon: <ArrowDownRight className="w-4 h-4" /> },
+  stable: { label: 'Steady', icon: <Minus className="w-4 h-4" /> },
+  high_variability: { label: 'Varied Swings', icon: <Activity className="w-4 h-4" /> },
+};
+
+const CADENCE_PRESENTATION: Record<string, { label: string; icon: React.ReactNode }> = {
+  increasing: { label: 'Closer Together', icon: <TrendingUp className="w-4 h-4" /> },
+  decreasing: { label: 'More Spaced Out', icon: <TrendingDown className="w-4 h-4" /> },
+  consistent: { label: 'Steady Rhythm', icon: <Activity className="w-4 h-4" /> },
+  irregular: { label: 'Irregular', icon: <Shuffle className="w-4 h-4" /> },
+};
+
+const formatDateOnly = (isoDate?: string): string => {
+  if (!isoDate) return '';
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+const formatHour = (hour: number): string => {
+  const d = new Date(2000, 0, 1, hour, 0);
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+};
+
+const humanizeKey = (key: string): string =>
+  key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+
+const formatStat = (value: number): string => {
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+};
+
+const confidenceTone = (confidence?: string): string => {
+  switch (confidence) {
+    case 'strong':
+      return 'patternshift-confidence-strong';
+    case 'moderate':
+      return 'patternshift-confidence-moderate';
+    default:
+      return 'patternshift-confidence-low';
+  }
+};
+
+/** Accessible "Why am I seeing this?" disclosure backed by PatternEvidence. */
+const EvidenceDisclosure: React.FC<{ evidence?: PatternEvidence | null }> = ({ evidence }) => {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+
+  if (!evidence) return null;
+
+  const breakdownEntries = Object.entries(
+    evidence.breakdown || {}
+  ) as Array<[string, number]>;
+
+  return (
+    <div className="patternshift-evidence">
+      <button
+        type="button"
+        className="patternshift-evidence-toggle"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Info className="w-3.5 h-3.5" />
+        <span>{open ? 'Hide the reasoning' : 'Why am I seeing this?'}</span>
+        <ChevronDown className="patternshift-evidence-chevron" />
+      </button>
+      {open && (
+        <div id={panelId} className="patternshift-evidence-body">
+          <p className="patternshift-evidence-explanation">{evidence.explanation}</p>
+          <div className="patternshift-evidence-meta">
+            <span>
+              Based on <strong>{evidence.sampleSize}</strong> reflections
+            </span>
+            <span className={`patternshift-confidence ${confidenceTone(evidence.confidence)}`}>
+              {evidence.confidence} confidence
+            </span>
+            {evidence.periodStart || evidence.periodEnd ? (
+              <span>
+                {formatDateOnly(evidence.periodStart)}
+                {evidence.periodStart && evidence.periodEnd ? ' – ' : ''}
+                {formatDateOnly(evidence.periodEnd)}
+              </span>
+            ) : null}
+          </div>
+          {breakdownEntries.length > 0 && (
+            <div className="patternshift-evidence-breakdown">
+              {breakdownEntries.map(([key, value]) => (
+                <span key={key} className="patternshift-evidence-stat">
+                  <span className="patternshift-evidence-key">{humanizeKey(key)}</span>
+                  <strong className="patternshift-evidence-value">{formatStat(value)}</strong>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MoodTrajectoryCard: React.FC<{ mood: MoodTrajectoryResult }> = ({ mood }) => {
+  if (mood.status !== 'available') return null;
+  const presentation =
+    MOOD_TRAJECTORY_PRESENTATION[mood.trajectory] || MOOD_TRAJECTORY_PRESENTATION.stable;
+
+  return (
+    <div className="patternshift-rhythm-card">
+      <div className="patternshift-rhythm-card-header">
+        <span className="patternshift-rhythm-card-label">
+          <Smile className="w-3.5 h-3.5 text-amber-500" />
+          Mood Over Time
+        </span>
+        <span className="patternshift-rhythm-card-conf">Measured</span>
+      </div>
+      <div className="patternshift-rhythm-value">
+        {presentation.icon}
+        <span>{presentation.label}</span>
+      </div>
+      {mood.earlyAverageMood !== null && mood.recentAverageMood !== null && (
+        <div className="patternshift-rhythm-meta">
+          Average rating moved from <strong>{mood.earlyAverageMood}</strong> →{' '}
+          <strong>{mood.recentAverageMood}</strong> / 5 across the period
+        </div>
+      )}
+      {mood.observation && (
+        <p className="patternshift-rhythm-observation">{mood.observation}</p>
+      )}
+      <EvidenceDisclosure evidence={mood.evidence} />
+    </div>
+  );
+};
+
+const ReflectionRhythmCard: React.FC<{ rhythm: ReflectionRhythmResult }> = ({ rhythm }) => {
+  if (rhythm.status !== 'available') return null;
+  const maxCount = Math.max(...BUCKET_ORDER.map((bucket) => rhythm.buckets[bucket]), 1);
+
+  return (
+    <div className="patternshift-rhythm-card">
+      <div className="patternshift-rhythm-card-header">
+        <span className="patternshift-rhythm-card-label">
+          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+          When You Reflect
+        </span>
+        <span className="patternshift-rhythm-card-conf">Deterministic</span>
+      </div>
+      <div className="patternshift-rhythm-buckets">
+        {BUCKET_ORDER.map((bucket) => {
+          const count = rhythm.buckets[bucket];
+          if (count === 0) return null;
+          const width = Math.max(14, Math.round((count / maxCount) * 100));
+          return (
+            <div key={bucket} className="patternshift-rhythm-bucket">
+              <span className="patternshift-rhythm-bucket-label">
+                {BUCKET_ICONS[bucket]}
+                {TIME_BUCKET_DISPLAY[bucket]}
+              </span>
+              <span className="patternshift-rhythm-bucket-track">
+                <span
+                  className={`patternshift-rhythm-bucket-bar bucket-${bucket}`}
+                  style={{ width: `${width}%` }}
+                />
+              </span>
+              <span className="patternshift-rhythm-bucket-count">{count}</span>
+            </div>
+          );
+        })}
+      </div>
+      {rhythm.observation && (
+        <p className="patternshift-rhythm-observation">{rhythm.observation}</p>
+      )}
+      <EvidenceDisclosure evidence={rhythm.evidence} />
+    </div>
+  );
+};
+
+const ReflectionFrequencyCard: React.FC<{ frequency: ReflectionFrequencyResult }> = ({
+  frequency,
+}) => {
+  if (frequency.status !== 'available') return null;
+  const presentation =
+    CADENCE_PRESENTATION[frequency.cadence] || CADENCE_PRESENTATION.consistent;
+
+  return (
+    <div className="patternshift-rhythm-card">
+      <div className="patternshift-rhythm-card-header">
+        <span className="patternshift-rhythm-card-label">
+          <Activity className="w-3.5 h-3.5 text-emerald-600" />
+          How Often You Reflect
+        </span>
+        <span className="patternshift-rhythm-card-conf">Measured</span>
+      </div>
+      <div className="patternshift-rhythm-value">
+        {presentation.icon}
+        <span>{presentation.label}</span>
+      </div>
+      {frequency.avgGapDays !== null && (
+        <div className="patternshift-rhythm-meta">
+          About <strong>{frequency.avgGapDays} days</strong> between reflections on average
+          {frequency.maxGapDays !== null ? ` · longest pause ${frequency.maxGapDays} days` : ''}
+        </div>
+      )}
+      {frequency.observation && (
+        <p className="patternshift-rhythm-observation">{frequency.observation}</p>
+      )}
+      <EvidenceDisclosure evidence={frequency.evidence} />
+    </div>
+  );
+};
+
+const ThemeEvolutionSection: React.FC<{ evolution: ThemeEvolutionResult }> = ({ evolution }) => {
+  if (evolution.status !== 'available') return null;
+  const hasAny =
+    evolution.emergingThemes.length +
+      evolution.increasingThemes.length +
+      evolution.persistentThemes.length +
+      evolution.fadingThemes.length >
+    0;
+  if (!hasAny) return null;
+
+  return (
+    <div className="patternshift-evo">
+      <div className="patternshift-section-header">
+        <h3 className="patternshift-section-title">
+          <Route className="w-4 h-4 text-emerald-600" />
+          <span>How Your Themes Are Evolving</span>
+        </h3>
+        <span className="patternshift-section-badge">Deterministic · Evidence-Grounded</span>
+      </div>
+
+      {evolution.observation && (
+        <p className="patternshift-evo-observation">{evolution.observation}</p>
+      )}
+
+      <div className="patternshift-evo-groups">
+        {evolution.emergingThemes.length > 0 && (
+          <div className="patternshift-evo-group">
+            <span className="patternshift-evo-group-label emerging">
+              Emerging in your recent reflections
+            </span>
+            <div className="patternshift-evo-chips">
+              {evolution.emergingThemes.map((row) => (
+                <span key={row.tag} className="patternshift-evo-chip emerging">
+                  #{row.tag}
+                  <b>
+                    {row.earlierCount} → {row.recentCount}
+                  </b>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {evolution.increasingThemes.length > 0 && (
+          <div className="patternshift-evo-group">
+            <span className="patternshift-evo-group-label growing">Appearing more often</span>
+            <div className="patternshift-evo-chips">
+              {evolution.increasingThemes.map((row) => (
+                <span key={row.tag} className="patternshift-evo-chip growing">
+                  #{row.tag}
+                  <b>
+                    {row.earlierCount} → {row.recentCount}
+                  </b>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {evolution.persistentThemes.length > 0 && (
+          <div className="patternshift-evo-group">
+            <span className="patternshift-evo-group-label persistent">Staying with you</span>
+            <div className="patternshift-evo-chips">
+              {evolution.persistentThemes.slice(0, 6).map((row) => (
+                <span key={row.tag} className="patternshift-evo-chip persistent">
+                  #{row.tag}
+                  <b>
+                    {row.earlierCount} → {row.recentCount}
+                  </b>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {evolution.fadingThemes.length > 0 && (
+          <div className="patternshift-evo-group">
+            <span className="patternshift-evo-group-label fading">
+              Fading from your recent reflections
+            </span>
+            <div className="patternshift-evo-chips">
+              {evolution.fadingThemes.map((row) => (
+                <span key={row.tag} className="patternshift-evo-chip fading">
+                  #{row.tag}
+                  <b>
+                    {row.earlierCount} → {row.recentCount}
+                  </b>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <EvidenceDisclosure evidence={evolution.evidence} />
+    </div>
+  );
+};
+
+const UnusualTimingSection: React.FC<{ unusual: UnusualTimingResult }> = ({ unusual }) => {
+  if (unusual.status !== 'available') return null;
+
+  return (
+    <div className="patternshift-unusual">
+      <div className="patternshift-section-header">
+        <h3 className="patternshift-section-title">
+          <Shuffle className="w-4 h-4 text-amber-500" />
+          <span>Unusual Moments</span>
+        </h3>
+        <span className="patternshift-section-badge">Timing Observation Only</span>
+      </div>
+
+      <div className="patternshift-unusual-body">
+        <div className="patternshift-unusual-icon">
+          <Clock className="w-5 h-5" />
+        </div>
+        <div className="space-y-2">
+          {unusual.observation && (
+            <p className="patternshift-unusual-text">{unusual.observation}</p>
+          )}
+          <p className="patternshift-unusual-meta">
+            You usually reflect during the{' '}
+            <strong>
+              {unusual.typicalBucket ? TIME_BUCKET_DISPLAY[unusual.typicalBucket] : 'same window'}
+            </strong>{' '}
+            (about {Math.round(unusual.typicalShare * 100)}% of the time). {unusual.flaggedCount}{' '}
+            recent {unusual.flaggedCount === 1 ? 'reflection was' : 'reflections were'} outside that
+            window
+            {unusual.flaggedHours.length > 0
+              ? ` — around ${unusual.flaggedHours.map(formatHour).join(', ')}.`
+              : '.'}
+          </p>
+          <p className="patternshift-unusual-note">
+            A pattern observation about when reflections happened — not a judgment about how you
+            are doing.
+          </p>
+        </div>
+      </div>
+
+      <EvidenceDisclosure evidence={unusual.evidence} />
+    </div>
+  );
+};
+
+const LocationPatternsSection: React.FC<{ locations: LocationPatternsResult }> = ({
+  locations,
+}) => {
+  if (locations.status !== 'available') return null;
+
+  return (
+    <div className="patternshift-locations">
+      <div className="patternshift-section-header">
+        <h3 className="patternshift-section-title">
+          <MapPin className="w-4 h-4 text-rose-500" />
+          <span>Places Connected to Reflection</span>
+        </h3>
+        <span className="patternshift-section-badge">Only Places You Added</span>
+      </div>
+
+      <div className="patternshift-locations-body">
+        <div className="patternshift-locations-icon">
+          <MapPin className="w-5 h-5" />
+        </div>
+        <div className="space-y-3">
+          {locations.observation && (
+            <p className="patternshift-unusual-text">{locations.observation}</p>
+          )}
+          {locations.recurringLabels.length > 0 && (
+            <div className="patternshift-locations-chips">
+              {locations.recurringLabels.map((loc) => (
+                <span key={loc.label} className="patternshift-location-chip">
+                  <MapPin className="w-3 h-3" />
+                  {loc.label}
+                  <b>× {loc.count}</b>
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="patternshift-locations-note">
+            Based only on locations you chose to attach to journal entries. Coordinates are never
+            shown and are never included in analysis summaries.
+          </p>
+        </div>
+      </div>
+
+      <EvidenceDisclosure evidence={locations.evidence} />
+    </div>
+  );
+};
+
+const PatternIntelligenceSections: React.FC<{
+  intelligence?: PatternIntelligence | null;
+}> = ({ intelligence }) => {
+  if (!intelligence) return null;
+
+  const hasRhythm =
+    intelligence.moodTrajectory.status === 'available' ||
+    intelligence.reflectionRhythm.status === 'available' ||
+    intelligence.reflectionFrequency.status === 'available';
+
+  return (
+    <>
+      {hasRhythm && (
+        <div className="patternshift-rhythm">
+          <div className="patternshift-section-header">
+            <h3 className="patternshift-section-title">
+              <Activity className="w-4 h-4 text-indigo-600" />
+              <span>Your Recent Rhythm</span>
+            </h3>
+            <span className="patternshift-section-badge">
+              Deterministic · Grounded in Your Records
+            </span>
+          </div>
+          <p className="patternshift-rhythm-intro">
+            Small, measured observations about how your reflections unfold over time — computed
+            directly from your records, not generated.
+          </p>
+          <div className="patternshift-rhythm-grid">
+            <MoodTrajectoryCard mood={intelligence.moodTrajectory} />
+            <ReflectionRhythmCard rhythm={intelligence.reflectionRhythm} />
+            <ReflectionFrequencyCard frequency={intelligence.reflectionFrequency} />
+          </div>
+        </div>
+      )}
+
+      <ThemeEvolutionSection evolution={intelligence.themeEvolution} />
+      <UnusualTimingSection unusual={intelligence.unusualTiming} />
+      <LocationPatternsSection locations={intelligence.locationPatterns} />
+    </>
+  );
+};
 
 export const PatternShiftDashboard: React.FC = () => {
   const { getIdToken } = useAuth();
@@ -193,8 +683,8 @@ export const PatternShiftDashboard: React.FC = () => {
           <div>
             <h3 className="patternshift-analyzing-title">Computing Longitudinal Patterns</h3>
             <p className="patternshift-analyzing-text">
-              Extracting deterministic mood trajectories, tag frequencies, and non-clinical themes from your
-              authenticated reflections...
+              Extracting deterministic mood trajectories, reflection rhythms, theme evolution, and
+              non-clinical patterns from your authenticated reflections...
             </p>
           </div>
         </div>
@@ -295,7 +785,7 @@ export const PatternShiftDashboard: React.FC = () => {
 
           {/* Overview Section */}
           <div className="patternshift-overview">
-            <div className="patternshift-overview-eyebrow">Your Recent Rhythm</div>
+            <div className="patternshift-overview-eyebrow">Overview</div>
             <h2 className="patternshift-overview-title">A short human-readable overview generated from the existing analysis data.</h2>
             <p className="patternshift-overview-text">
               {insight.metrics?.mood?.averageMood ? (
@@ -383,6 +873,9 @@ export const PatternShiftDashboard: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Phase 10: Evidence-Grounded Intelligence */}
+          <PatternIntelligenceSections intelligence={insight.intelligence} />
 
           {/* Observations Section */}
           <div className="patternshift-observations">

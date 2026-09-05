@@ -3,6 +3,10 @@ import type { JournalEntry } from '../types/journal';
 import type { Conversation, ReflectionMessage } from '../types/reflection';
 import type { PatternShiftInsight } from '../types/patternshift';
 import type { EntryLocation } from '../types/location';
+import {
+  analyzePatternIntelligence,
+  type PatternIntelligence,
+} from '../intelligence/patternAnalysis';
 
 /**
  * Demo Fixture Data
@@ -11,11 +15,13 @@ import type { EntryLocation } from '../types/location';
  * All entries are clearly fictional and never overlap with real user data.
  */
 
-// Helper to create timestamps relative to today
-function daysAgo(n: number): Timestamp {
+// Helper to create timestamps relative to today.
+// `hour`/`minute` let each fixture land in a specific time-of-day bucket so
+// the Phase 10 rhythm/timing patterns are realistic and deterministic.
+function daysAgo(n: number, hour = 10, minute = 30): Timestamp {
   const date = new Date();
   date.setDate(date.getDate() - n);
-  date.setHours(10, 30, 0, 0);
+  date.setHours(hour, minute, 0, 0);
   return Timestamp.fromDate(date);
 }
 
@@ -31,14 +37,14 @@ function hoursAgo(n: number): Timestamp {
 export const DEMO_JOURNAL_ENTRIES: JournalEntry[] = [
   {
     id: 'demo-entry-1',
-    title: 'A slower morning',
-    content: 'I woke before my alarm today, which almost never happens. Instead of reaching for my phone, I made tea and watched the light shift across the kitchen. It reminded me that not every morning needs to be rushed. I want to hold onto that feeling of spaciousness, even when work picks up again. The quiet moments feel like gifts I keep forgetting to unwrap.',
+    title: 'A quiet evening',
+    content: 'After a long day I made tea and watched the light soften across the room. Instead of reaching for my phone, I let myself sit with the quiet. It reminded me that not every evening needs to be filled. I want to hold onto that feeling of spaciousness, even when work picks up again. The quiet moments feel like gifts I keep forgetting to unwrap.',
     moodRating: 4,
-    tags: ['morning', 'mindfulness', 'gratitude'],
-    wordCount: 68,
+    tags: ['mindfulness', 'gratitude', 'evening'],
+    wordCount: 70,
     crisisFlagged: false,
-    createdAt: daysAgo(0), // Today
-    updatedAt: daysAgo(0),
+    createdAt: daysAgo(0, 21, 15), // Today, evening
+    updatedAt: daysAgo(0, 21, 15),
     location: {
       latitude: 40.7128,
       longitude: -74.0060,
@@ -53,19 +59,19 @@ export const DEMO_JOURNAL_ENTRIES: JournalEntry[] = [
     tags: ['work', 'boundaries', 'stress'],
     wordCount: 62,
     crisisFlagged: false,
-    createdAt: daysAgo(1),
-    updatedAt: daysAgo(1),
+    createdAt: daysAgo(1, 22, 30), // Yesterday, late evening
+    updatedAt: daysAgo(1, 22, 30),
   },
   {
     id: 'demo-entry-3',
     title: 'The conversation I kept replaying',
     content: 'I had a difficult conversation with a friend yesterday. My mind keeps circling back to what I should have said differently. But then I caught myself and asked: what if nothing needed to be different? What if the discomfort is just part of being honest with someone you care about? Writing this down helps me see that I was brave to say the hard thing.',
-    moodRating: 3,
-    tags: ['relationships', 'courage', 'self-compassion'],
+    moodRating: 4,
+    tags: ['boundaries', 'courage', 'self-compassion'],
     wordCount: 76,
     crisisFlagged: false,
-    createdAt: daysAgo(3),
-    updatedAt: daysAgo(3),
+    createdAt: daysAgo(2, 1, 20), // Late night thoughts
+    updatedAt: daysAgo(2, 1, 20),
   },
   {
     id: 'demo-entry-4',
@@ -75,12 +81,12 @@ export const DEMO_JOURNAL_ENTRIES: JournalEntry[] = [
     tags: ['gratitude', 'small-moments', 'wellbeing'],
     wordCount: 61,
     crisisFlagged: false,
-    createdAt: daysAgo(5),
-    updatedAt: daysAgo(5),
+    createdAt: daysAgo(4, 19, 10), // Evening
+    updatedAt: daysAgo(4, 19, 10),
     location: {
-      latitude: 51.5074,
-      longitude: -0.1278,
-      label: 'London, United Kingdom',
+      latitude: 40.7128,
+      longitude: -74.0060,
+      label: 'Brooklyn, New York',
     },
   },
   {
@@ -91,30 +97,35 @@ export const DEMO_JOURNAL_ENTRIES: JournalEntry[] = [
     tags: ['evening', 'mindfulness', 'peace'],
     wordCount: 52,
     crisisFlagged: false,
-    createdAt: daysAgo(6),
-    updatedAt: daysAgo(6),
+    createdAt: daysAgo(6, 18, 45), // Evening
+    updatedAt: daysAgo(6, 18, 45),
+    location: {
+      latitude: 51.5074,
+      longitude: -0.1278,
+      label: 'London, United Kingdom',
+    },
   },
   {
     id: 'demo-entry-6',
     title: 'A difficult afternoon',
     content: 'I felt overwhelmed by deadlines today. The anxious thoughts kept spiraling. Eventually I stepped outside and took three slow breaths. It did not solve anything, but it created a small gap between me and the worry. That gap is where I found the strength to continue.',
     moodRating: 2,
-    tags: ['anxiety', 'stress', 'coping'],
+    tags: ['stress', 'coping'],
     wordCount: 56,
     crisisFlagged: false,
-    createdAt: daysAgo(10),
-    updatedAt: daysAgo(10),
+    createdAt: daysAgo(7, 15, 10), // Afternoon
+    updatedAt: daysAgo(7, 15, 10),
   },
   {
     id: 'demo-entry-7',
     title: 'Something shifting',
-    content: 'I have been reflecting more consistently lately, and I am starting to notice patterns. My mood tends to dip on Sundays. I feel more creative in the mornings. These observations feel like small keys to understanding myself better. I want to keep paying attention.',
-    moodRating: 4,
-    tags: ['patterns', 'self-awareness', 'growth'],
+    content: 'This week felt heavier than I expected. I keep noticing the same patterns surfacing — the way my mood dips and the thoughts I circle back to. It is uncomfortable, but naming it helps. I want to keep paying attention, even when the noticing is hard.',
+    moodRating: 2,
+    tags: ['self-awareness', 'patterns'],
     wordCount: 52,
     crisisFlagged: false,
-    createdAt: daysAgo(14),
-    updatedAt: daysAgo(14),
+    createdAt: daysAgo(13, 7, 30), // Morning, two weeks ago
+    updatedAt: daysAgo(13, 7, 30),
     location: {
       latitude: 48.8566,
       longitude: 2.3522,
@@ -132,18 +143,18 @@ export const DEMO_CONVERSATIONS: Conversation[] = [
     title: 'Reflection on work boundaries',
     summary: 'Explored the challenge of setting boundaries at work and how small pauses throughout the day can help maintain a sense of spaciousness.',
     status: 'completed',
-    createdAt: daysAgo(2),
-    updatedAt: daysAgo(2),
-    summaryUpdatedAt: daysAgo(2),
+    createdAt: daysAgo(2, 20, 0), // Two days ago, evening
+    updatedAt: daysAgo(2, 20, 0),
+    summaryUpdatedAt: daysAgo(2, 20, 0),
   },
   {
     id: 'demo-conv-2',
     title: 'Navigating a difficult conversation',
     summary: 'Reflected on a tough conversation with a friend, exploring the discomfort of honesty and the courage it takes to speak from the heart.',
     status: 'completed',
-    createdAt: daysAgo(4),
-    updatedAt: daysAgo(4),
-    summaryUpdatedAt: daysAgo(4),
+    createdAt: daysAgo(4, 18, 30), // Four days ago, evening
+    updatedAt: daysAgo(4, 18, 30),
+    summaryUpdatedAt: daysAgo(4, 18, 30),
   },
   {
     id: 'demo-conv-3',
@@ -259,6 +270,32 @@ export const DEMO_MESSAGES: Record<string, ReflectionMessage[]> = {
 };
 
 /**
+ * Phase 10: deterministic intelligence computed from the demo fixtures at
+ * module load. This keeps the demo insight consistent with the synthetic
+ * journal data — if a fixture changes, the patterns update automatically.
+ * The analysis is pure and runs entirely in the browser.
+ */
+function buildDemoIntelligence(): PatternIntelligence {
+  const analyticEntries = DEMO_JOURNAL_ENTRIES.map((entry) => ({
+    id: entry.id,
+    content: entry.content,
+    moodRating: entry.moodRating,
+    tags: entry.tags || [],
+    createdAt: entry.createdAt,
+    location: entry.location,
+  }));
+  const completedConversations = DEMO_CONVERSATIONS.filter(
+    (conv) => conv.status === 'completed'
+  ).map((conv) => ({
+    id: conv.id,
+    createdAt: conv.createdAt,
+  }));
+  return analyzePatternIntelligence(analyticEntries, completedConversations);
+}
+
+const DEMO_INTELLIGENCE = buildDemoIntelligence();
+
+/**
  * Demo PatternShift Insight
  */
 export const DEMO_PATTERN_INSIGHT: PatternShiftInsight = {
@@ -282,35 +319,44 @@ export const DEMO_PATTERN_INSIGHT: PatternShiftInsight = {
       end: daysAgo(0).toDate().toISOString().split('T')[0],
     },
     mood: {
-      distribution: { 1: 0, 2: 1, 3: 2, 4: 3, 5: 1 },
-      averageMood: 3.6,
-      standardDeviation: 0.8,
+      distribution: { 1: 0, 2: 2, 3: 1, 4: 3, 5: 1 },
+      averageMood: 3.4,
+      standardDeviation: 1.1,
       trajectory: 'improving',
-      earlierAverageMood: 3.2,
-      recentAverageMood: 4.0,
+      earlierAverageMood: 3.0,
+      recentAverageMood: 3.75,
     },
     tags: {
       tagFrequencies: [
-        { tag: 'mindfulness', count: 3 },
+        { tag: 'mindfulness', count: 2 },
         { tag: 'gratitude', count: 2 },
+        { tag: 'evening', count: 2 },
         { tag: 'stress', count: 2 },
-        { tag: 'relationships', count: 1 },
-        { tag: 'work', count: 1 },
+        { tag: 'boundaries', count: 2 },
         { tag: 'courage', count: 1 },
-        { tag: 'growth', count: 1 },
+        { tag: 'self-compassion', count: 1 },
+        { tag: 'work', count: 1 },
+        { tag: 'coping', count: 1 },
+        { tag: 'small-moments', count: 1 },
+        { tag: 'wellbeing', count: 1 },
         { tag: 'self-awareness', count: 1 },
+        { tag: 'patterns', count: 1 },
+        { tag: 'peace', count: 1 },
       ],
-      topTags: ['mindfulness', 'gratitude', 'stress'],
+      topTags: ['mindfulness', 'gratitude', 'evening', 'stress', 'boundaries'],
       tagMoodAssociations: [
-        { tag: 'mindfulness', averageMood: 4.5, count: 3 },
-        { tag: 'gratitude', averageMood: 4.5, count: 2 },
+        { tag: 'mindfulness', averageMood: 4.5, count: 2 },
+        { tag: 'gratitude', averageMood: 4.0, count: 2 },
+        { tag: 'evening', averageMood: 4.5, count: 2 },
         { tag: 'stress', averageMood: 2.5, count: 2 },
-        { tag: 'relationships', averageMood: 3.0, count: 1 },
-        { tag: 'work', averageMood: 3.0, count: 1 },
+        { tag: 'boundaries', averageMood: 3.5, count: 2 },
+        { tag: 'courage', averageMood: 4.0, count: 1 },
+        { tag: 'self-compassion', averageMood: 4.0, count: 1 },
       ],
       tagVelocity: [
-        { tag: 'mindfulness', earlierCount: 1, recentCount: 2, trend: 'increasing' },
-        { tag: 'gratitude', earlierCount: 1, recentCount: 1, trend: 'stable' },
+        { tag: 'gratitude', earlierCount: 0, recentCount: 2, trend: 'increasing' },
+        { tag: 'boundaries', earlierCount: 0, recentCount: 2, trend: 'increasing' },
+        { tag: 'mindfulness', earlierCount: 1, recentCount: 1, trend: 'stable' },
         { tag: 'stress', earlierCount: 1, recentCount: 1, trend: 'stable' },
       ],
     },
@@ -342,5 +388,6 @@ export const DEMO_PATTERN_INSIGHT: PatternShiftInsight = {
     'What patterns do I notice in when I feel most at peace?',
     'How might I bring more of what works into my daily rhythm?',
   ],
+  intelligence: DEMO_INTELLIGENCE,
   type: 'patternshift',
 };

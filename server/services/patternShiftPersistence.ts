@@ -48,6 +48,7 @@ export async function fetchUserEntriesForPatternShift(
       tags: Array.isArray(data.tags) ? data.tags : [],
       createdAt: data.createdAt || null,
       updatedAt: data.updatedAt || null,
+      location: data.location || null,
     };
   });
 }
@@ -112,6 +113,7 @@ export async function persistPatternShiftInsight(
       metrics: insight.metrics,
       observations: insight.observations,
       suggestedInquiries: insight.suggestedInquiries,
+      intelligence: insight.intelligence || null,
       type: insight.type || 'patternshift',
     });
   });
@@ -154,6 +156,7 @@ export async function fetchLatestPatternShiftInsight(
     metrics: data.metrics || null,
     observations: data.observations || [],
     suggestedInquiries: data.suggestedInquiries || [],
+    intelligence: data.intelligence || null,
     type: data.type || 'patternshift',
   };
 }

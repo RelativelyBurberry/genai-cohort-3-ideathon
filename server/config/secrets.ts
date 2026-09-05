@@ -193,20 +193,24 @@ export async function getSecret(secretName: SecretName): Promise<string> {
     return cached;
   }
 
-  // Create the retrieval promise
+  // Create the retrieval promise.
+  // For the synchronous environment-var path this promise can reject
+  // before `SECRET_CACHE.set` below runs; the extra `.catch` below
+  // guarantees a rejected promise is ALWAYS removed from the cache once
+  // it settles, so failed retrievals never permanently poison the cache.
   const retrievalPromise = (async (): Promise<string> => {
-    try {
-      if (cfg.useSecretManager) {
-        return await fetchSecretFromManager(secretName);
-      } else {
-        return getSecretFromEnv(secretName);
-      }
-    } catch (error) {
-      // Remove failed promise from cache to allow retry
-      SECRET_CACHE.delete(secretName);
-      throw error;
+    if (cfg.useSecretManager) {
+      return await fetchSecretFromManager(secretName);
+    } else {
+      return getSecretFromEnv(secretName);
     }
   })();
+
+  // Never cache a rejected promise: remove failures as soon as they
+  // settle so a later call can retry once the configuration is repaired.
+  retrievalPromise.catch(() => {
+    SECRET_CACHE.delete(secretName);
+  });
 
   // Cache the promise (not the value) to handle concurrent requests
   SECRET_CACHE.set(secretName, retrievalPromise);

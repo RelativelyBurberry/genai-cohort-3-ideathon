@@ -274,4 +274,139 @@ describe('PatternShiftEngine - Deterministic Analysis & Guards', () => {
       expect(result.metrics!.mood.averageMood).toBe(4.0);
     });
   });
+
+  describe('Phase 10 Intelligence Integration', () => {
+    // 14-day dataset shaped like real usage: varied timestamps, tags, and
+    // optional locations. Two entries share the "Brooklyn, New York" label,
+    // four entries carry a location, and there is one completed conversation.
+    const twoWeekEntries: RawEntry[] = [
+      {
+        id: 'e7',
+        content: 'Oldest entry about noticing patterns.',
+        moodRating: 2,
+        tags: ['self-awareness', 'patterns'],
+        location: { latitude: 48.8566, longitude: 2.3522, label: 'Paris, France' },
+        createdAt: '2026-08-30T07:30:00Z',
+      },
+      {
+        id: 'e6',
+        content: 'A heavy day.',
+        moodRating: 2,
+        tags: ['stress', 'coping'],
+        createdAt: '2026-09-05T15:00:00Z',
+      },
+      {
+        id: 'e5',
+        content: 'A calm evening walk.',
+        moodRating: 5,
+        tags: ['evening', 'mindfulness', 'peace'],
+        location: { latitude: 51.5074, longitude: -0.1278, label: 'London, United Kingdom' },
+        createdAt: '2026-09-06T18:50:00Z',
+      },
+      {
+        id: 'e4',
+        content: 'Grateful for small moments.',
+        moodRating: 4,
+        tags: ['gratitude', 'small-moments', 'wellbeing'],
+        location: { latitude: 40.7128, longitude: -74.006, label: 'Brooklyn, New York' },
+        createdAt: '2026-09-10T19:15:00Z',
+      },
+      {
+        id: 'e3',
+        content: 'Night thoughts about boundaries.',
+        moodRating: 4,
+        tags: ['boundaries', 'courage', 'self-compassion'],
+        createdAt: '2026-09-12T01:30:00Z',
+      },
+      {
+        id: 'e2',
+        content: 'Boundaries at work.',
+        moodRating: 3,
+        tags: ['work', 'boundaries', 'stress'],
+        createdAt: '2026-09-12T22:30:00Z',
+      },
+      {
+        id: 'e1',
+        content: 'A gentle evening reflection.',
+        moodRating: 4,
+        tags: ['mindfulness', 'gratitude', 'evening'],
+        location: { latitude: 40.7128, longitude: -74.006, label: 'Brooklyn, New York' },
+        createdAt: '2026-09-13T21:15:00Z',
+      },
+    ];
+
+    it('omits the intelligence block entirely when the insufficient-data guard trips', () => {
+      const result = computePatternShiftMetrics([twoWeekEntries[0]], []);
+      expect(result.hasSufficientData).toBe(false);
+      expect(result.intelligence).toBeUndefined();
+    });
+
+    it('attaches all six deterministic intelligence modules when analysis runs', () => {
+      const conversation: RawConversation = {
+        id: 'c1',
+        title: 'Reflecting on calm',
+        status: 'completed',
+        summary: 'Explored small moments of calm and the role of evening routines.',
+        createdAt: '2026-09-10T18:40:00Z',
+      };
+      const result = computePatternShiftMetrics(twoWeekEntries, [conversation]);
+
+      expect(result.hasSufficientData).toBe(true);
+      expect(result.intelligence).toBeDefined();
+      expect(result.intelligence!.moodTrajectory).toBeDefined();
+      expect(result.intelligence!.reflectionRhythm).toBeDefined();
+      expect(result.intelligence!.reflectionFrequency).toBeDefined();
+      expect(result.intelligence!.themeEvolution).toBeDefined();
+      expect(result.intelligence!.unusualTiming).toBeDefined();
+      expect(result.intelligence!.locationPatterns).toBeDefined();
+
+      // Each module reports an honest status.
+      const modules = Object.values(result.intelligence!);
+      for (const mod of modules) {
+        expect(['available', 'insufficient_data']).toContain(mod.status);
+      }
+
+      // Enough evidence: mood trajectory & location patterns are available.
+      expect(result.intelligence!.moodTrajectory.status).toBe('available');
+      expect(result.intelligence!.moodTrajectory.trajectory).toBe('upward');
+      expect(result.intelligence!.locationPatterns.status).toBe('available');
+    });
+
+    it('feeds completed-conversation timestamps into the timing modules', () => {
+      // 3 entries + 1 completed conversation = 4 timestamped reflections,
+      // which clears the rhythm module's minimum evidence threshold of 4.
+      const conversation: RawConversation = {
+        id: 'c1',
+        title: 'A conversation',
+        status: 'completed',
+        summary: 'Explored patterns over the past weeks.',
+        createdAt: '2026-09-10T18:40:00Z',
+      };
+      const entries = twoWeekEntries.slice(-3);
+      const result = computePatternShiftMetrics(entries, [conversation]);
+
+      expect(result.hasSufficientData).toBe(true);
+      expect(result.intelligence!.reflectionRhythm.sampleSize).toBe(4);
+      expect(result.intelligence!.reflectionRhythm.status).toBe('available');
+    });
+
+    it('exposes location labels in intelligence but NEVER in the metrics payload', () => {
+      const result = computePatternShiftMetrics(twoWeekEntries, []);
+      const metricsJson = JSON.stringify(result.metrics);
+      const intelligenceJson = JSON.stringify(result.intelligence);
+
+      // Recurring label surfaces in the observation (privacy-safe, label only).
+      expect(result.intelligence!.locationPatterns.observation).toContain('Brooklyn, New York');
+      expect(intelligenceJson).toContain('Brooklyn, New York');
+
+      // SECURITY: coordinates and labels must never reach the metrics payload
+      // (that payload is what gets summarized by Gemini).
+      expect(metricsJson).not.toContain('Brooklyn');
+      expect(metricsJson).not.toContain('New York');
+      expect(metricsJson).not.toContain('40.7128');
+      expect(metricsJson).not.toContain('-74.006');
+      expect(metricsJson).not.toContain('Paris');
+      expect(metricsJson).not.toContain('London');
+    });
+  });
 });

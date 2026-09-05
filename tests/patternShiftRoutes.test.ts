@@ -217,6 +217,99 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(persistSpy).toHaveBeenCalledWith('user_123', expect.anything());
     });
 
+    it('returns 503 service_unavailable (not a misleading 500) when Gemini configuration is broken', async () => {
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        retryAfterSeconds: 0,
+        remaining: 9,
+        count: 1,
+        limit: 10,
+        resetTimeMs: Date.now() + 60000,
+      });
+
+      vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce([
+        { id: 'e1', content: 'First entry.', moodRating: 3, createdAt: '2026-09-01T10:00:00Z' },
+        { id: 'e2', content: 'Second entry.', moodRating: 4, createdAt: '2026-09-02T10:00:00Z' },
+        { id: 'e3', content: 'Third entry.', moodRating: 5, createdAt: '2026-09-03T10:00:00Z' },
+      ]);
+      vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
+
+      // Reproduce the runtime failure: secret provider cannot supply the key.
+      vi.spyOn(geminiService, 'generatePatternShiftInsights').mockRejectedValueOnce(
+        new Error('GEMINI_CONFIGURATION_ERROR: GEMINI_API_KEY could not be retrieved from secret provider.')
+      );
+      const persistSpy = vi.spyOn(persistenceService, 'persistPatternShiftInsight');
+
+      const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer valid_token',
+        },
+      });
+      const data = await res.json();
+
+      expect(res.status).toBe(503);
+      expect(data.error).toBe('service_unavailable');
+      expect(data.message).toContain('AI configuration is incomplete');
+      // FAIL CLOSED: no fake insights, nothing persisted.
+      expect(persistSpy).not.toHaveBeenCalled();
+      expect(data.insight).toBeUndefined();
+    });
+
+    it('includes the Phase 10 evidence-grounded intelligence block in a successful insight', async () => {
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        retryAfterSeconds: 0,
+        remaining: 9,
+        count: 1,
+        limit: 10,
+        resetTimeMs: Date.now() + 60000,
+      });
+
+      vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce([
+        { id: 'e7', content: 'Oldest entry.', moodRating: 2, tags: ['self-awareness', 'patterns'], location: { latitude: 48.8566, longitude: 2.3522, label: 'Paris, France' }, createdAt: '2026-08-30T07:30:00Z' },
+        { id: 'e6', content: 'Down day.', moodRating: 2, tags: ['stress', 'coping'], createdAt: '2026-09-05T15:00:00Z' },
+        { id: 'e5', content: 'Calm evening.', moodRating: 5, tags: ['evening', 'mindfulness', 'peace'], location: { latitude: 51.5074, longitude: -0.1278, label: 'London, United Kingdom' }, createdAt: '2026-09-06T18:50:00Z' },
+        { id: 'e4', content: 'Grateful.', moodRating: 4, tags: ['gratitude', 'small-moments', 'wellbeing'], location: { latitude: 40.7128, longitude: -74.006, label: 'Brooklyn, New York' }, createdAt: '2026-09-10T19:15:00Z' },
+        { id: 'e3', content: 'Night thoughts.', moodRating: 4, tags: ['boundaries', 'courage', 'self-compassion'], createdAt: '2026-09-12T01:30:00Z' },
+        { id: 'e2', content: 'Boundaries at work.', moodRating: 3, tags: ['work', 'boundaries', 'stress'], createdAt: '2026-09-12T22:30:00Z' },
+        { id: 'e1', content: 'Recent reflection.', moodRating: 4, tags: ['mindfulness', 'gratitude', 'evening'], location: { latitude: 40.7128, longitude: -74.006, label: 'Brooklyn, New York' }, createdAt: '2026-09-13T21:15:00Z' },
+      ]);
+      vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([
+        { id: 'c1', title: 'Reflecting', status: 'completed', summary: 'Explored calm.', createdAt: '2026-09-10T18:40:00Z' },
+      ]);
+
+      vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce({
+        observations: ['A gentle observation.'],
+        suggestedInquiries: ['A gentle question?'],
+      });
+      vi.spyOn(persistenceService, 'persistPatternShiftInsight').mockResolvedValueOnce(undefined);
+
+      const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer valid_token',
+        },
+      });
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.status).toBe('success');
+      expect(data.insight.intelligence).toBeDefined();
+      expect(data.insight.intelligence.moodTrajectory.status).toBe('available');
+      expect(data.insight.intelligence.moodTrajectory.trajectory).toBe('upward');
+      expect(data.insight.intelligence.reflectionRhythm.status).toBe('available');
+      expect(data.insight.intelligence.reflectionFrequency.status).toBe('available');
+      expect(data.insight.intelligence.themeEvolution.status).toBe('available');
+      expect(data.insight.intelligence.unusualTiming.status).toBe('available');
+      expect(data.insight.intelligence.locationPatterns.status).toBe('available');
+      expect(data.insight.intelligence.locationPatterns.observation).toContain('Brooklyn, New York');
+      // SECURITY: location data must NOT be part of the metrics payload
+      expect(JSON.stringify(data.insight.metrics)).not.toContain('Brooklyn');
+    });
+
     it('strictly isolates data lookup by verified token UID and ignores body tampering', async () => {
       vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
         allowed: true,

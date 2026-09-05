@@ -6,7 +6,16 @@
  * 2. Never asks Gemini to compute statistics, counts, or trend math.
  * 3. Enforces Insufficient Data Guard (< 3 meaningful historical items).
  * 4. Bounded, sanitized output structure.
+ *
+ * Phase 10: extended deterministic intelligence (mood trajectory, timing
+ * rhythm, reflection frequency, theme evolution, unusual timing, location
+ * patterns) is computed by the pure modules in
+ * `src/intelligence/patternAnalysis`. Location data is aggregated into
+ * counts/labels only and NEVER leaves the analysis layer or reaches Gemini.
  */
+
+import { analyzePatternIntelligence } from '../../src/intelligence/patternAnalysis/index.js';
+import type { PatternIntelligence } from '../../src/intelligence/patternAnalysis/index.js';
 
 export interface RawEntry {
   id: string;
@@ -16,6 +25,12 @@ export interface RawEntry {
   tags?: string[];
   createdAt?: any;
   updatedAt?: any;
+  /** Phase 9 optional, user-provided location (never auto-captured). */
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    label?: string;
+  } | null;
 }
 
 export interface RawConversation {
@@ -59,6 +74,8 @@ export interface EngineResult {
       reflectionThemes: string[];
     };
   };
+  /** Phase 10: extended deterministic intelligence (evidence-grounded). */
+  intelligence?: PatternIntelligence;
 }
 
 const COMMON_STOP_WORDS = new Set([
@@ -326,6 +343,25 @@ export function computePatternShiftMetrics(
     }
   });
 
+  // 7. Phase 10: Extended Deterministic Intelligence
+  //    Pure, evidence-grounded modules analyze mood trajectory, timing
+  //    rhythm, reflection frequency, theme evolution, unusual timing, and
+  //    optional location patterns. Each module enforces its own minimum
+  //    evidence threshold and returns `insufficient_data` honestly.
+  const analyzableEntries = validEntries.map((e) => ({
+    id: e.id,
+    content: typeof e.content === 'string' ? e.content : '',
+    moodRating: typeof e.moodRating === 'number' ? e.moodRating : undefined,
+    tags: Array.isArray(e.tags) ? e.tags : [],
+    createdAt: e.createdAt,
+    location: e.location || null,
+  }));
+  const conversationTimedItems = validConversations.map((c) => ({
+    id: c.id,
+    createdAt: c.createdAt,
+  }));
+  const intelligence = analyzePatternIntelligence(analyzableEntries, conversationTimedItems);
+
   return {
     hasSufficientData: true,
     requiredCount: 3,
@@ -357,5 +393,6 @@ export function computePatternShiftMetrics(
         reflectionThemes: reflectionThemes.slice(0, 6),
       },
     },
+    intelligence,
   };
 }

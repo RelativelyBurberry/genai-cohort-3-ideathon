@@ -550,6 +550,7 @@ export async function getUserEntriesRest(token: string, uid: string): Promise<an
         tags: Array.isArray(fields.tags) ? fields.tags : [],
         createdAt: fields.createdAt || d.createTime || null,
         updatedAt: fields.updatedAt || d.updateTime || null,
+        location: fields.location || null,
       };
     });
   } catch (err: any) {
@@ -688,6 +689,7 @@ export async function getLatestInsightRest(token: string, uid: string): Promise<
         metrics: fields.metrics || null,
         observations: fields.observations || [],
         suggestedInquiries: fields.suggestedInquiries || [],
+        intelligence: fields.intelligence || null,
         type: fields.type || 'patternshift',
       };
     });

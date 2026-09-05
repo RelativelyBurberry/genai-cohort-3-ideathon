@@ -98,6 +98,7 @@ patternShiftRouter.post(
         metrics: engineResult.metrics,
         observations: aiInsights.observations,
         suggestedInquiries: aiInsights.suggestedInquiries,
+        intelligence: engineResult.intelligence || null,
         type: 'patternshift' as const,
       };
 
@@ -120,6 +121,23 @@ patternShiftRouter.post(
         });
         return;
       }
+
+      // Configuration error: the AI interpretation layer cannot start
+      // because its secret is unavailable in this runtime. Surface an
+      // honest, actionable 503 (mirroring the reflection route) instead
+      // of a misleading generic 500. NEVER fall back to fake insights.
+      const isGeminiConfigError =
+        typeof err?.message === 'string' && err.message.includes('GEMINI_CONFIGURATION_ERROR');
+      if (isGeminiConfigError) {
+        console.error('[PATTERNSHIFT_ANALYZE_ERROR] AI configuration error (secret unavailable).');
+        res.status(503).json({
+          error: 'service_unavailable',
+          message:
+            'PatternShift analysis is temporarily unavailable because the AI configuration is incomplete. Please try again later.',
+        });
+        return;
+      }
+
       console.error('[PATTERNSHIFT_ANALYZE_ERROR]', err);
       res.status(500).json({
         error: 'internal_error',

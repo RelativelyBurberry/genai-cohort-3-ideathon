@@ -5639,6 +5639,471 @@ textarea.input,
   font-variant-numeric: tabular-nums;
 }
 
+/* ----------------------------------------------------------------
+   Phase 10: Evidence-Grounded Intelligence sections
+   Deterministic rhythm cards, theme evolution, unusual timing, and
+   location awareness with "Why am I seeing this?" disclosures.
+   ---------------------------------------------------------------- */
+
+/* Rhythm suite (Mood Over Time / When You Reflect / How Often) */
+.patternshift-rhythm {
+  padding: 2rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.patternshift-rhythm-intro {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  line-height: 1.6;
+  margin-top: -0.5rem;
+  margin-bottom: 1.5rem;
+  max-width: 42rem;
+}
+
+.patternshift-rhythm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.patternshift-rhythm-card {
+  padding: 1.5rem;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.patternshift-rhythm-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.patternshift-rhythm-card-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.patternshift-rhythm-card-conf {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-subtle-foreground);
+}
+
+.patternshift-rhythm-value {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-foreground);
+}
+
+.patternshift-rhythm-value svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.patternshift-rhythm-meta {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+  line-height: 1.55;
+}
+
+.patternshift-rhythm-observation {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  line-height: 1.6;
+  border-left: 2px solid var(--color-border);
+  padding-left: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.patternshift-rhythm-buckets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-top: 0.25rem;
+}
+
+.patternshift-rhythm-bucket {
+  display: grid;
+  grid-template-columns: 90px 1fr 24px;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.patternshift-rhythm-bucket-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+}
+
+.patternshift-rhythm-bucket-track {
+  height: 0.5rem;
+  background-color: var(--color-surface-muted);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.patternshift-rhythm-bucket-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s var(--ease-reflectra);
+}
+
+.patternshift-rhythm-bucket-bar.bucket-night {
+  background-color: #6366f1;
+}
+
+.patternshift-rhythm-bucket-bar.bucket-morning {
+  background-color: #f59e0b;
+}
+
+.patternshift-rhythm-bucket-bar.bucket-afternoon {
+  background-color: #0ea5e9;
+}
+
+.patternshift-rhythm-bucket-bar.bucket-evening {
+  background-color: #8b5cf6;
+}
+
+.patternshift-rhythm-bucket-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Theme Evolution */
+.patternshift-evo {
+  padding: 2rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.patternshift-evo-observation {
+  font-size: 0.9375rem;
+  color: var(--color-foreground);
+  line-height: 1.7;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.patternshift-evo-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.patternshift-evo-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.patternshift-evo-group-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  min-width: 12.5rem;
+}
+
+.patternshift-evo-group-label.emerging {
+  color: #0f766e;
+}
+
+.patternshift-evo-group-label.growing {
+  color: #166534;
+}
+
+.patternshift-evo-group-label.persistent {
+  color: #6d28d9;
+}
+
+.patternshift-evo-group-label.fading {
+  color: #a16207;
+}
+
+.patternshift-evo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.patternshift-evo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+}
+
+.patternshift-evo-chip b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.patternshift-evo-chip.emerging {
+  border-color: rgba(15, 118, 110, 0.35);
+}
+
+.patternshift-evo-chip.growing {
+  border-color: rgba(22, 101, 52, 0.35);
+}
+
+.patternshift-evo-chip.fading {
+  border-color: rgba(161, 98, 7, 0.35);
+  opacity: 0.8;
+}
+
+/* Unusual Moments */
+.patternshift-unusual {
+  padding: 2rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.patternshift-unusual-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.patternshift-unusual-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  background-color: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-warning);
+  flex-shrink: 0;
+}
+
+.patternshift-unusual-text {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--color-foreground);
+}
+
+.patternshift-unusual-meta {
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--color-muted-foreground);
+}
+
+.patternshift-unusual-note {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--color-subtle-foreground);
+}
+
+/* Places Connected to Reflection */
+.patternshift-locations {
+  padding: 2rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.patternshift-locations-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.patternshift-locations-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  background-color: rgba(156, 74, 74, 0.08);
+  border: 1px solid rgba(156, 74, 74, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.patternshift-locations-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.patternshift-location-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+}
+
+.patternshift-location-chip b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+}
+
+.patternshift-locations-note {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--color-subtle-foreground);
+  max-width: 34rem;
+}
+
+/* "Why am I seeing this?" disclosure */
+.patternshift-evidence {
+  margin-top: 0.75rem;
+  border-top: 1px dashed var(--color-border-subtle);
+  padding-top: 0.75rem;
+}
+
+.patternshift-evidence-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  transition: color var(--duration-base) var(--ease-reflectra);
+}
+
+.patternshift-evidence-toggle:hover {
+  color: var(--color-primary);
+}
+
+.patternshift-evidence-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.patternshift-evidence-toggle .patternshift-evidence-chevron {
+  transition: transform var(--duration-base) var(--ease-reflectra);
+}
+
+.patternshift-evidence-toggle[aria-expanded='true'] .patternshift-evidence-chevron {
+  transform: rotate(180deg);
+}
+
+.patternshift-evidence-body {
+  margin-top: 0.625rem;
+  padding: 1rem;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.patternshift-evidence-explanation {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-foreground);
+}
+
+.patternshift-evidence-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+}
+
+.patternshift-evidence-meta strong {
+  color: var(--color-foreground);
+}
+
+.patternshift-confidence {
+  font-weight: 600;
+}
+
+.patternshift-confidence-strong {
+  color: #166534;
+}
+
+.patternshift-confidence-moderate {
+  color: #a16207;
+}
+
+.patternshift-confidence-low {
+  color: var(--color-subtle-foreground);
+}
+
+.patternshift-evidence-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.patternshift-evidence-stat {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.patternshift-evidence-key {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-subtle-foreground);
+}
+
+.patternshift-evidence-value {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Error State */
 .patternshift-error {
   padding: 1.5rem;
@@ -5829,12 +6294,25 @@ textarea.input,
   .patternshift-observations,
   .patternshift-themes,
   .patternshift-inquiries,
-  .patternshift-correlations {
+  .patternshift-correlations,
+  .patternshift-rhythm,
+  .patternshift-evo,
+  .patternshift-unusual,
+  .patternshift-locations {
     padding: 1.5rem;
   }
   
   .patternshift-inquiry-grid {
     grid-template-columns: 1fr;
+  }
+
+  .patternshift-rhythm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .patternshift-unusual-body,
+  .patternshift-locations-body {
+    flex-direction: column;
   }
 }
 

@@ -269,6 +269,27 @@ describe('Secret Provider', () => {
       // Verify - Secret Manager called twice (once for failure, once for retry)
       expect(mockAccessSecretVersion).toHaveBeenCalledTimes(2);
     });
+
+    it('does not permanently poison the cache for the synchronous env-var path', async () => {
+      // Setup
+      process.env.USE_SECRET_MANAGER = 'false';
+      delete process.env.GEMINI_API_KEY;
+      initializeSecretProvider({ useSecretManager: false });
+
+      // First call fails synchronously (missing env var)
+      await expect(getSecret(SECRET_NAMES.GEMINI_API_KEY)).rejects.toThrow(
+        'SECRET_CONFIG_ERROR'
+      );
+
+      // Configuration repaired
+      process.env.GEMINI_API_KEY = 'repaired-key';
+
+      // Second call must succeed — the rejected promise must NOT have
+      // been left in the cache (this bug previously forced a server
+      // restart after configuring the secret).
+      const secret = await getSecret(SECRET_NAMES.GEMINI_API_KEY);
+      expect(secret).toBe('repaired-key');
+    });
   });
 
   describe('Concurrent Access', () => {

@@ -50,17 +50,26 @@ async function getAiClient(): Promise<GoogleGenAI> {
   }
 
   aiClientPromise = (async () => {
-    const apiKey = await getGeminiApiKey();
-    const modelName = getGeminiModelName();
-    console.log('[DIAG_GEMINI_INIT] Initializing GoogleGenAI client, apiKeyPresent:', Boolean(apiKey), 'resolvedModel:', modelName);
-    return new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+    try {
+      const apiKey = await getGeminiApiKey();
+      const modelName = getGeminiModelName();
+      console.log('[DIAG_GEMINI_INIT] Initializing GoogleGenAI client, apiKeyPresent:', Boolean(apiKey), 'resolvedModel:', modelName);
+      return new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
         },
-      },
-    });
+      });
+    } catch (err) {
+      // NEVER cache a failed initialization. A transient secret or
+      // configuration failure must not poison the client for the
+      // lifetime of the process: clearing the cache here lets the
+      // next call retry as soon as the configuration is repaired.
+      aiClientPromise = null;
+      throw err;
+    }
   })();
 
   return aiClientPromise;
