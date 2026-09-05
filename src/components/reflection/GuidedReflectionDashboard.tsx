@@ -1,0 +1,197 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import type { Conversation } from '../../types/reflection';
+import {
+  subscribeToConversations,
+  createConversation,
+  deleteConversation,
+} from '../../services/reflectionService';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { ConversationList } from './ConversationList';
+import { ConversationView } from './ConversationView';
+import { Sparkles, Plus } from 'lucide-react';
+
+export const GuidedReflectionDashboard: React.FC = () => {
+  const { user, getIdToken } = useAuth();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Subscribe to all conversations for this authenticated user
+  useEffect(() => {
+    if (!user) return;
+
+    console.log(`[DIAG_SYNC_TRACE] stage: useEffect_listener_subscription_path | user.uid: ${user.uid}`);
+    setLoading(true);
+
+    const unsubscribe = subscribeToConversations(
+      user.uid,
+      (convs, meta) => {
+        console.log(
+          `[DIAG_SYNC_TRACE] stage: snapshot_callback_invocation | docCount: ${convs.length} | docIds:`,
+          meta?.docIds || convs.map((c) => c.id),
+          `| docChanges:`,
+          meta?.changes || []
+        );
+
+        setConversations((prev) => {
+          const prevIds = prev.map((c) => c.id);
+          const nextIds = convs.map((c) => c.id);
+          console.log(
+            `[DIAG_SYNC_TRACE] stage: react_conversations_state_setter | beforeDocIds:`,
+            prevIds,
+            `| afterDocIds:`,
+            nextIds
+          );
+          return convs;
+        });
+
+        setLoading(false);
+
+        // Auto-select the first conversation if none is selected or if active was removed
+        setActiveConversationId((prevActive) => {
+          if (prevActive && convs.some((c) => c.id === prevActive)) {
+            console.log(
+              `[DIAG_SYNC_TRACE] stage: active_conversation_reconciliation | preservedActiveId: ${prevActive}`
+            );
+            return prevActive;
+          }
+          const nextActive = convs.length > 0 ? convs[0].id : null;
+          console.log(
+            `[DIAG_SYNC_TRACE] stage: active_conversation_reconciliation | activeDocRemovedOrReset | prevActiveId: ${prevActive} | newActiveId: ${nextActive}`
+          );
+          return nextActive;
+        });
+      },
+      (err) => {
+        console.error('[GuidedReflection] Failed to subscribe to conversations:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      console.log(`[DIAG_SYNC_TRACE] stage: listener_unsubscribed | user.uid: ${user.uid}`);
+      unsubscribe();
+    };
+  }, [user]);
+
+  const handleStartNew = async () => {
+    if (!user) return;
+    try {
+      const newId = await createConversation(user.uid, `Reflection Session · ${new Date().toLocaleDateString()}`);
+      setActiveConversationId(newId);
+    } catch (err) {
+      console.error('[GuidedReflection] Failed to create conversation:', err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!user) return;
+    try {
+      console.log(`[DIAG_DELETE_STAGE] stage: delete_token_acquired | conversationId: ${id}`);
+      const token = await getIdToken(false);
+      if (!token) throw new Error('Authentication required.');
+      const res = await deleteConversation(token, id);
+      console.log(`[DIAG_DELETE_STAGE] stage: delete_api_response_received | conversationId: ${id} | res:`, res);
+
+      // Clean up client Firestore SDK local cache
+      try {
+        await deleteDoc(doc(db, 'users', user.uid, 'conversations', id));
+      } catch (_cacheErr) {
+        // Document was already removed on server
+      }
+
+      // Synchronize React state immediately upon confirmed Firestore deletion
+      setConversations((prev) => {
+        const remaining = prev.filter((c) => c.id !== id);
+        console.log(
+          `[DIAG_SYNC_TRACE] stage: react_conversations_state_setter_after_delete | beforeCount: ${prev.length} | afterCount: ${remaining.length} | removedId: ${id}`
+        );
+
+        setActiveConversationId((prevActive) => {
+          if (prevActive === id) {
+            const nextActive = remaining.length > 0 ? remaining[0].id : null;
+            console.log(
+              `[DIAG_SYNC_TRACE] stage: active_conversation_reconciliation_after_delete | oldActive: ${id} | newActive: ${nextActive}`
+            );
+            return nextActive;
+          }
+          return prevActive;
+        });
+
+        return remaining;
+      });
+    } catch (err: any) {
+      console.error('[GuidedReflection] Failed to delete conversation:', err);
+      throw err;
+    }
+  };
+
+  const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
+
+  if (!user) return null;
+
+  return (
+    <div id="guided-reflection-dashboard" className="flex-1 min-h-0 w-full flex flex-col overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full min-h-0 flex-1 overflow-hidden">
+        {/* Left Column: Conversation Sessions List */}
+        <div
+          className={`md:col-span-4 h-full min-h-0 flex flex-col overflow-hidden ${
+            activeConversation ? 'hidden md:block' : 'block'
+          }`}
+        >
+          <ConversationList
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            onSelectConversation={(id) => setActiveConversationId(id)}
+            onStartNewConversation={handleStartNew}
+            onDeleteConversation={handleDelete}
+            loading={loading}
+          />
+        </div>
+
+        {/* Right Column: Active Conversation Dialogue */}
+        <div
+          className={`md:col-span-8 h-full min-h-0 flex flex-col overflow-hidden ${
+            activeConversation ? 'block' : 'hidden md:block'
+          }`}
+        >
+          {activeConversation ? (
+            <ConversationView
+              key={activeConversation.id}
+              conversation={activeConversation}
+              uid={user.uid}
+              getIdToken={getIdToken}
+              onBack={() => setActiveConversationId(null)}
+              onConversationUpdated={() => {
+                // Real-time subscription will automatically reflect updates
+              }}
+            />
+          ) : (
+            <div className="h-full bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col items-center justify-center p-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <div className="max-w-sm">
+                <h3 className="text-base font-bold text-slate-900">Guided Reflection Companion</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Reflectra guides you through multi-turn personal introspection using secure, server-side AI. Select a past session or start a new reflection.
+                </p>
+              </div>
+              <button
+                type="button"
+                id="btn-empty-start-reflection"
+                onClick={handleStartNew}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Begin Guided Reflection</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

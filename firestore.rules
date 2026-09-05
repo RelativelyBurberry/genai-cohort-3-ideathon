@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Verify user authentication and UID ownership
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // 1. User Root Document
+    match /users/{userId} {
+      allow read, create, update: if isOwner(userId);
+      allow delete: if false; // Deletions handled exclusively via backend cascade endpoint
+    }
+
+    // Helper: Validate entry schema & constraints
+    function isValidEntry(data) {
+      return data.title is string
+          && data.content is string
+          && data.moodRating is number
+          && data.moodRating >= 1 && data.moodRating <= 5
+          && data.tags is list
+          && data.wordCount is number
+          && data.wordCount >= 0
+          && data.crisisFlagged == false;
+    }
+
+    // 2. Standalone Journal Entries (Client-owned raw data)
+    match /users/{userId}/entries/{entryId} {
+      allow read, delete: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+                    && isValidEntry(request.resource.data)
+                    && request.resource.data.createdAt is timestamp
+                    && request.resource.data.updatedAt is timestamp;
+
+      allow update: if isOwner(userId)
+                    && isValidEntry(request.resource.data)
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.updatedAt is timestamp;
+    }
+
+    // 3. Conversations (Hybrid ownership)
+    match /users/{userId}/conversations/{conversationId} {
+      allow read: if isOwner(userId);
+
+      // Client creation: initial status must be 'active', summary fields must be null
+      allow create: if isOwner(userId)
+                    && request.resource.data.status == "active"
+                    && (!('summary' in request.resource.data) || request.resource.data.summary == null)
+                    && (!('summaryUpdatedAt' in request.resource.data) || request.resource.data.summaryUpdatedAt == null);
+
+      // Client update: authenticated owner may update legitimate client-owned metadata (e.g. title, updatedAt),
+      // but is strictly forbidden from creating, modifying, or removing backend-owned lifecycle fields:
+      // status, summary, summaryUpdatedAt.
+      allow update: if isOwner(userId)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'summary', 'summaryUpdatedAt']);
+
+      allow delete: if isOwner(userId);
+
+      // 4. Messages Subcollection
+      match /messages/{messageId} {
+        allow read: if isOwner(userId);
+
+        // Strict message provenance: Client may only create user-authored messages (role == "user").
+        // Assistant messages are persisted exclusively by privileged backend logic.
+        allow create: if isOwner(userId)
+                      && request.resource.data.role == "user";
+
+        // Message updates are forbidden (messages remain immutable).
+        allow update: if false;
+
+        // Cascade deletion allowed for conversation owner
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // 5. PatternShift Insights (Read-only for client; written strictly by Firebase Admin SDK)
+    match /users/{userId}/insights/{insightId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // 6. Distributed Rate Limiter & Security State (Backend-only)
+    match /users/{userId}/limits/{documentId} {
+      allow read, write: if false;
+    }
+
+    // Default Deny for all other documents
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

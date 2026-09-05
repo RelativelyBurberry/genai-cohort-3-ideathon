@@ -1,0 +1,8 @@
+{
+  "name": "Reflectra",
+  "description": "A privacy-first AI-powered personal reflection journal with longitudinal pattern awareness.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
