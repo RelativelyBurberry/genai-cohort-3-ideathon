@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { BookOpen, Plus, Heart, Feather, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useDemo, useIsDemoSession } from '../../demo';
 import type { JournalEntry, CreateJournalEntryInput } from '../../types/journal';
@@ -18,15 +18,15 @@ type ViewMode = 'list' | 'create' | 'detail' | 'edit';
 
 export const JournalDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { 
-    isDemoSession, 
-    demoJournalEntries, 
-    createDemoJournalEntry, 
-    updateDemoJournalEntry, 
-    deleteDemoJournalEntry 
+  const {
+    isDemoSession,
+    demoJournalEntries,
+    createDemoJournalEntry,
+    updateDemoJournalEntry,
+    deleteDemoJournalEntry,
   } = useDemo();
   const isDemo = useIsDemoSession();
-  
+
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export const JournalDashboard: React.FC = () => {
       },
       (err) => {
         setLoading(false);
-        setError(err.message || 'Failed to load entries from your personal vault.');
+        setError(err.message || 'Your journal could not be loaded.');
       }
     );
 
@@ -97,23 +97,6 @@ export const JournalDashboard: React.FC = () => {
     const unsub = setupSubscription();
     return () => unsub();
   }, [setupSubscription]);
-
-  // Summary Metrics
-  const stats = useMemo(() => {
-    if (entries.length === 0) {
-      return { totalEntries: 0, totalWords: 0, avgMood: 0 };
-    }
-    const totalWords = entries.reduce((acc, e) => acc + (e.wordCount || 0), 0);
-    const avgMood = (
-      entries.reduce((acc, e) => acc + (e.moodRating || 3), 0) / entries.length
-    ).toFixed(1);
-
-    return {
-      totalEntries: entries.length,
-      totalWords,
-      avgMood,
-    };
-  }, [entries]);
 
   // Create or Update Handler
   const handleSaveEntry = async (payload: CreateJournalEntryInput) => {
@@ -134,9 +117,9 @@ export const JournalDashboard: React.FC = () => {
         }
         setStatusNotification({
           type: 'success',
-          message: isDemo 
-            ? 'Demo reflection updated (local only).' 
-            : 'Your reflection was updated successfully.',
+          message: isDemo
+            ? 'Demo reflection updated (local only).'
+            : 'Your reflection was updated.',
         });
         setViewMode('detail');
       } else {
@@ -147,9 +130,9 @@ export const JournalDashboard: React.FC = () => {
         }
         setStatusNotification({
           type: 'success',
-          message: isDemo 
-            ? 'Demo reflection created (local only).' 
-            : 'Reflection saved to your private journal vault.',
+          message: isDemo
+            ? 'Demo reflection created (local only).'
+            : 'Reflection saved to your private journal.',
         });
         setViewMode('list');
       }
@@ -172,7 +155,7 @@ export const JournalDashboard: React.FC = () => {
       }
       setStatusNotification({
         type: 'success',
-        message: 'Reflection deleted.',
+        message: 'Reflection removed.',
       });
       setEntryToDelete(null);
       if (selectedEntry?.id === entryToDelete.id) {
@@ -190,118 +173,83 @@ export const JournalDashboard: React.FC = () => {
   };
 
   return (
-    <div id="journal-dashboard" className="flex-1 min-h-0 w-full overflow-y-auto space-y-6 pr-1">
-      {/* Gentle Floating Notification */}
-      {statusNotification && (
-        <div
-          className={`p-3 rounded-xl border text-xs font-medium flex items-center justify-between gap-3 shadow-xs animate-fade-in ${
-            statusNotification.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border-rose-200'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {statusNotification.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            )}
-            <span>{statusNotification.message}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setStatusNotification(null)}
-            className="text-slate-400 hover:text-slate-600 text-xs"
+    <div id="journal-dashboard" className="journal-shell w-full">
+      <div className="journal-page">
+        {/* Gentle Floating Notification */}
+        {statusNotification && (
+          <div
+            className={`journal-toast ${statusNotification.type}`}
+            role={statusNotification.type === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
           >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* Stats Bar */}
-      {entries.length > 0 && viewMode === 'list' && (
-        <section
-          id="journal-stats-banner"
-          className="grid grid-cols-3 gap-3 sm:gap-4 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs"
-        >
-          <div className="flex flex-col items-start">
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Total Reflections
-            </span>
-            <span className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5">
-              {stats.totalEntries}
-            </span>
-          </div>
-
-          <div className="flex flex-col items-start border-l border-slate-100 pl-4 sm:pl-6">
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Words Written
-            </span>
-            <span className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5">
-              {stats.totalWords.toLocaleString()}
-            </span>
-          </div>
-
-          <div className="flex flex-col items-start border-l border-slate-100 pl-4 sm:pl-6">
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Avg. Mood Rating
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-xl sm:text-2xl font-bold text-slate-900">{stats.avgMood}</span>
-              <span className="text-xs text-slate-400">/ 5</span>
+            <div className="journal-toast-content">
+              {statusNotification.type === 'success' ? (
+                <CheckCircle className="journal-toast-icon" aria-hidden="true" />
+              ) : (
+                <AlertCircle className="journal-toast-icon" aria-hidden="true" />
+              )}
+              <span>{statusNotification.message}</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setStatusNotification(null)}
+              className="journal-toast-dismiss"
+              aria-label="Dismiss notification"
+            >
+              Dismiss
+            </button>
           </div>
-        </section>
-      )}
+        )}
 
-      {/* Main Mode View */}
-      {viewMode === 'list' && (
-        <EntryHistory
-          entries={entries}
-          loading={loading}
-          error={error}
-          onSelectEntry={(entry) => {
-            setSelectedEntry(entry);
-            setViewMode('detail');
-          }}
-          onNewEntry={() => {
-            setSelectedEntry(null);
-            setViewMode('create');
-          }}
-          onDeleteRequest={(entry) => setEntryToDelete(entry)}
-          onRetry={setupSubscription}
-        />
-      )}
+        {/* Main Mode View */}
+        {viewMode === 'list' && (
+          <EntryHistory
+            entries={entries}
+            loading={loading}
+            error={error}
+            onSelectEntry={(entry) => {
+              setSelectedEntry(entry);
+              setViewMode('detail');
+            }}
+            onNewEntry={() => {
+              setSelectedEntry(null);
+              setViewMode('create');
+            }}
+            onDeleteRequest={(entry) => setEntryToDelete(entry)}
+            onRetry={setupSubscription}
+          />
+        )}
 
-      {viewMode === 'create' && (
-        <JournalEditor
-          initialEntry={null}
-          onSave={handleSaveEntry}
-          onCancel={() => setViewMode('list')}
-          isSaving={isSaving}
-        />
-      )}
+        {viewMode === 'create' && (
+          <JournalEditor
+            initialEntry={null}
+            onSave={handleSaveEntry}
+            onCancel={() => setViewMode('list')}
+            isSaving={isSaving}
+          />
+        )}
 
-      {viewMode === 'detail' && selectedEntry && (
-        <EntryDetail
-          entry={selectedEntry}
-          onBack={() => setViewMode('list')}
-          onEdit={(entry) => {
-            setSelectedEntry(entry);
-            setViewMode('edit');
-          }}
-          onDeleteRequest={(entry) => setEntryToDelete(entry)}
-        />
-      )}
+        {viewMode === 'detail' && selectedEntry && (
+          <EntryDetail
+            entry={selectedEntry}
+            onBack={() => setViewMode('list')}
+            onEdit={(entry) => {
+              setSelectedEntry(entry);
+              setViewMode('edit');
+            }}
+            onDeleteRequest={(entry) => setEntryToDelete(entry)}
+          />
+        )}
 
-      {viewMode === 'edit' && selectedEntry && (
-        <JournalEditor
-          initialEntry={selectedEntry}
-          onSave={handleSaveEntry}
-          onCancel={() => setViewMode('detail')}
-          isSaving={isSaving}
-        />
-      )}
+        {viewMode === 'edit' && selectedEntry && (
+          <JournalEditor
+            initialEntry={selectedEntry}
+            onSave={handleSaveEntry}
+            onCancel={() => setViewMode('detail')}
+            isSaving={isSaving}
+          />
+        )}
+      </div>
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal

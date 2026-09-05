@@ -14,6 +14,7 @@ import {
   Minus,
   CheckCircle2,
   Info,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useDemo, useIsDemoSession } from '../../demo';
@@ -119,11 +120,11 @@ export const PatternShiftDashboard: React.FC = () => {
   const getTrajectoryIcon = (trajectory?: string) => {
     switch (trajectory) {
       case 'improving':
-        return <ArrowUpRight className="w-4 h-4 text-emerald-600" />;
+        return <ArrowUpRight className="w-4 h-4" />;
       case 'declining':
-        return <ArrowDownRight className="w-4 h-4 text-amber-600" />;
+        return <ArrowDownRight className="w-4 h-4" />;
       case 'stable':
-        return <Minus className="w-4 h-4 text-slate-500" />;
+        return <Minus className="w-4 h-4" />;
       default:
         return null;
     }
@@ -143,34 +144,21 @@ export const PatternShiftDashboard: React.FC = () => {
   };
 
   return (
-    <div
-      id="patternshift-workspace"
-      className="h-full flex flex-col min-h-0 overflow-y-auto pr-1 pb-8 space-y-6"
-    >
-      {/* Header & Control Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-indigo-600" />
-              <span>PatternShift Insights</span>
-            </h2>
-            <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full">
-              Longitudinal Intelligence
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 max-w-xl">
-            Identifies recurring emotional themes, tag correlations, and mood trajectories across your
-            personal reflections. Non-clinical and grounded in your private records.
-          </p>
-        </div>
-
+    <div id="patternshift-workspace" className="patternshift-page">
+      {/* Header */}
+      <div className="patternshift-header">
+        <div className="patternshift-eyebrow">PatternShift</div>
+        <h1 className="patternshift-title">The patterns beneath your thoughts.</h1>
+        <p className="patternshift-subtitle">
+          A quieter look at the themes, rhythms, and connections emerging across your reflections.
+        </p>
+        
         <button
           type="button"
           id="btn-run-patternshift"
           onClick={handleRunAnalysis}
           disabled={analyzing}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer shrink-0"
+          className="patternshift-update-btn"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${analyzing ? 'animate-spin' : ''}`} />
           <span>{analyzing ? 'Analyzing Patterns...' : insight ? 'Update Analysis' : 'Run Analysis'}</span>
@@ -179,11 +167,8 @@ export const PatternShiftDashboard: React.FC = () => {
 
       {/* Error Banner */}
       {errorMessage && (
-        <div
-          id="patternshift-error"
-          className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-3"
-        >
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+        <div id="patternshift-error" className="patternshift-error">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <span className="font-semibold">Analysis Encountered an Issue</span>
             <p className="text-rose-700">{errorMessage}</p>
@@ -193,24 +178,21 @@ export const PatternShiftDashboard: React.FC = () => {
 
       {/* Initial Loading Skeleton */}
       {loadingLatest && (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-3">
-          <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
+        <div className="reflection-loading">
+          <RefreshCw className="w-6 h-6 animate-spin" style={{ color: 'var(--color-primary)' }} />
           <p className="text-xs text-slate-500">Retrieving latest longitudinal reflections...</p>
         </div>
       )}
 
       {/* Analyzing State Banner */}
       {analyzing && (
-        <div
-          id="patternshift-analyzing-card"
-          className="p-6 rounded-2xl bg-indigo-50/70 border border-indigo-200 text-indigo-950 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in"
-        >
-          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+        <div id="patternshift-analyzing-card" className="patternshift-analyzing">
+          <div className="patternshift-analyzing-icon">
             <Sparkles className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-indigo-900">Computing Longitudinal Patterns</h3>
-            <p className="text-xs text-indigo-700/80 mt-1 max-w-md">
+            <h3 className="patternshift-analyzing-title">Computing Longitudinal Patterns</h3>
+            <p className="patternshift-analyzing-text">
               Extracting deterministic mood trajectories, tag frequencies, and non-clinical themes from your
               authenticated reflections...
             </p>
@@ -220,25 +202,22 @@ export const PatternShiftDashboard: React.FC = () => {
 
       {/* Insufficient Data State */}
       {!loadingLatest && !analyzing && insufficientDataInfo && (
-        <div
-          id="patternshift-insufficient-data"
-          className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 flex flex-col items-center text-center space-y-4 shadow-xs"
-        >
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+        <div id="patternshift-insufficient-data" className="patternshift-insufficient">
+          <div className="patternshift-insufficient-icon">
             <Layers className="w-6 h-6" />
           </div>
           <div className="max-w-md space-y-1.5">
-            <h3 className="text-sm font-bold text-slate-900">More Reflection History Needed</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <h3 className="patternshift-insufficient-title">More Reflection History Needed</h3>
+            <p className="patternshift-insufficient-text">
               PatternShift requires at least <strong className="text-slate-900">{insufficientDataInfo.required}</strong> meaningful
               journal entries or completed guided reflections to discover recurring themes and emotional
               trajectories.
             </p>
           </div>
 
-          <div className="w-full max-w-xs bg-slate-100 rounded-full h-3 p-0.5 overflow-hidden border border-slate-200">
+          <div className="patternshift-progress-bar">
             <div
-              className="bg-amber-500 h-full rounded-full transition-all duration-500"
+              className="patternshift-progress-fill"
               style={{
                 width: `${Math.min(
                   100,
@@ -247,7 +226,7 @@ export const PatternShiftDashboard: React.FC = () => {
               }}
             />
           </div>
-          <span className="text-[11px] font-medium text-slate-500">
+          <span className="patternshift-progress-label">
             {insufficientDataInfo.available} of {insufficientDataInfo.required} reflections recorded
           </span>
 
@@ -259,16 +238,13 @@ export const PatternShiftDashboard: React.FC = () => {
 
       {/* Empty State (No previous analysis yet and not insufficient) */}
       {!loadingLatest && !analyzing && !insufficientDataInfo && !insight && (
-        <div
-          id="patternshift-empty-state"
-          className="bg-white rounded-2xl border border-slate-200 p-8 flex flex-col items-center text-center space-y-4 shadow-xs"
-        >
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+        <div id="patternshift-empty-state" className="patternshift-empty">
+          <div className="patternshift-empty-icon">
             <Sparkles className="w-6 h-6" />
           </div>
           <div className="max-w-md space-y-1.5">
-            <h3 className="text-sm font-bold text-slate-900">Discover Your Reflection Patterns</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <h3 className="patternshift-empty-title">Discover Your Reflection Patterns</h3>
+            <p className="patternshift-empty-text">
               PatternShift evaluates your journaling trajectory, recurring themes, and tag associations over time
               to offer gentle, non-clinical insights.
             </p>
@@ -276,7 +252,7 @@ export const PatternShiftDashboard: React.FC = () => {
           <button
             type="button"
             onClick={handleRunAnalysis}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+            className="patternshift-empty-btn"
           >
             <TrendingUp className="w-3.5 h-3.5" />
             <span>Generate Longitudinal Insights</span>
@@ -312,58 +288,77 @@ export const PatternShiftDashboard: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 shrink-0">
-              <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <Info className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>Observational · Non-Clinical</span>
             </div>
           </div>
 
-          {/* Metric Highlights Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Overview Section */}
+          <div className="patternshift-overview">
+            <div className="patternshift-overview-eyebrow">Your Recent Rhythm</div>
+            <h2 className="patternshift-overview-title">A short human-readable overview generated from the existing analysis data.</h2>
+            <p className="patternshift-overview-text">
+              {insight.metrics?.mood?.averageMood ? (
+                <>
+                  Your average mood rating is <strong>{insight.metrics.mood.averageMood.toFixed(1)}/5.0</strong> with a 
+                  <strong>{getTrajectoryLabel(insight.metrics.mood.trajectory).toLowerCase()}</strong> trajectory. 
+                  {insight.itemCount?.total} reflections analyzed reveal{' '}
+                  {insight.metrics.tags?.topTags?.length > 0
+                    ? `primary focus on ${insight.metrics.tags.topTags.slice(0, 3).join(', ')}`
+                    : 'emerging themes'}
+                  .
+                </>
+              ) : (
+                'Patterns are beginning to emerge as you continue reflecting.'
+              )}
+            </p>
+            <div className="patternshift-disclaimer">
+              <strong>Observational & Non-Clinical:</strong> These insights are synthesized from your private reflection data 
+              using deterministic analysis. They are not medical, psychological, or diagnostic assessments.
+            </div>
+          </div>
+
+          {/* Key Signals Grid */}
+          <div className="patternshift-signals">
             {/* Average Mood & Trajectory */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-                <span className="flex items-center gap-1.5">
+            <div className="patternshift-signal-card">
+              <div className="patternshift-signal-header">
+                <span className="patternshift-signal-label">
                   <Smile className="w-3.5 h-3.5 text-amber-500" />
                   Mood Rating Average
                 </span>
                 <span className="text-[11px] font-mono text-slate-400">1–5 Scale</span>
               </div>
-              <div className="my-3 flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-slate-900 font-mono">
-                  {insight.metrics?.mood?.averageMood?.toFixed(1) || '—'}
-                </span>
-                <span className="text-xs text-slate-400">/ 5.0</span>
+              <div className="patternshift-signal-value">
+                {insight.metrics?.mood?.averageMood?.toFixed(1) || '—'}
               </div>
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border-t border-slate-100 pt-2">
+              <div className="patternshift-signal-meta">
                 {getTrajectoryIcon(insight.metrics?.mood?.trajectory)}
                 <span>{getTrajectoryLabel(insight.metrics?.mood?.trajectory)}</span>
               </div>
             </div>
 
             {/* Total Reflected Content */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-                <span className="flex items-center gap-1.5">
+            <div className="patternshift-signal-card">
+              <div className="patternshift-signal-header">
+                <span className="patternshift-signal-label">
                   <Layers className="w-3.5 h-3.5 text-indigo-500" />
                   Analyzed Records
                 </span>
                 <span className="text-[11px] font-mono text-slate-400">Deterministic</span>
               </div>
-              <div className="my-3 flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-slate-900 font-mono">
-                  {insight.itemCount?.total || 0}
-                </span>
-                <span className="text-xs text-slate-400">total reflections</span>
+              <div className="patternshift-signal-value">
+                {insight.itemCount?.total || 0}
               </div>
-              <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-2">
+              <div className="patternshift-signal-meta">
                 {insight.itemCount?.entries || 0} Entries · {insight.itemCount?.completedConversations || 0} Guided
               </div>
             </div>
 
             {/* Top Themes & Tags */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-                <span className="flex items-center gap-1.5">
+            <div className="patternshift-signal-card">
+              <div className="patternshift-signal-header">
+                <span className="patternshift-signal-label">
                   <Tag className="w-3.5 h-3.5 text-emerald-500" />
                   Primary Focus Areas
                 </span>
@@ -374,7 +369,7 @@ export const PatternShiftDashboard: React.FC = () => {
                   insight.metrics.tags.topTags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-700 rounded-md border border-slate-200"
+                      className="px-2.5 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-700 rounded-md border border-slate-200"
                     >
                       #{tag}
                     </span>
@@ -383,92 +378,96 @@ export const PatternShiftDashboard: React.FC = () => {
                   <span className="text-xs text-slate-400 italic">No specific tags recorded</span>
                 )}
               </div>
-              <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-2">
+              <div className="patternshift-signal-meta">
                 {insight.metrics?.tags?.tagFrequencies?.length || 0} distinct tags extracted
               </div>
             </div>
           </div>
 
-          {/* AI Observational Reflections */}
-          <div
-            id="patternshift-observations-section"
-            className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+          {/* Observations Section */}
+          <div className="patternshift-observations">
+            <div className="patternshift-section-header">
+              <h3 className="patternshift-section-title">
                 <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Reflective Observations</span>
+                <span>Things Worth Noticing</span>
               </h3>
-              <span className="text-[11px] text-slate-400">AI Synthesized from Metrics</span>
+              <span className="patternshift-section-badge">AI Synthesized from Metrics</span>
             </div>
 
             <div className="space-y-3">
               {(insight.observations || []).map((obs, idx) => (
                 <div
                   key={idx}
-                  className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start gap-3"
+                  className="patternshift-observation"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-slate-700 leading-relaxed font-normal">{obs}</p>
+                  <CheckCircle2 className="patternshift-observation-icon w-4 h-4 shrink-0 mt-0.5" />
+                  <p className="text-xs leading-relaxed font-normal">{obs}</p>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Recurring Themes Section */}
+          {(insight.metrics?.tags?.topTags || []).length > 0 && (
+            <div className="patternshift-themes">
+              <div className="patternshift-section-header">
+                <h3 className="patternshift-section-title">
+                  <Tag className="w-4 h-4 text-emerald-600" />
+                  <span>Themes Returning to You</span>
+                </h3>
+                <span className="patternshift-section-badge">{insight.metrics.tags.tagFrequencies?.length || 0} distinct themes</span>
+              </div>
+
+              <div className="patternshift-themes-list">
+                {insight.metrics.tags.topTags.map((tag) => (
+                  <span key={tag} className="patternshift-theme-tag">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Suggested Inquiries for Future Reflection */}
-          <div
-            id="patternshift-inquiries-section"
-            className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <HelpCircle className="w-4 h-4 text-indigo-600" />
-                <span>Questions for Future Journaling</span>
-              </h3>
-              <span className="text-[11px] text-slate-400">Open-Ended Inquiries</span>
-            </div>
+          {(insight.suggestedInquiries || []).length > 0 && (
+            <div className="patternshift-inquiries">
+              <div className="patternshift-section-header">
+                <h3 className="patternshift-section-title">
+                  <HelpCircle className="w-4 h-4 text-indigo-600" />
+                  <span>Questions for Future Journaling</span>
+                </h3>
+                <span className="patternshift-section-badge">Open-Ended Inquiries</span>
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(insight.suggestedInquiries || []).map((inquiry, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 rounded-xl bg-indigo-50/40 border border-indigo-100/80 flex flex-col justify-between space-y-2"
-                >
-                  <p className="text-xs text-indigo-950 font-medium leading-relaxed italic">
-                    "{inquiry}"
-                  </p>
-                  <span className="text-[10px] text-indigo-700/60 font-medium">
-                    Prompt {idx + 1}
-                  </span>
-                </div>
-              ))}
+              <div className="patternshift-inquiry-grid">
+                {(insight.suggestedInquiries || []).map((inquiry, idx) => (
+                  <div key={idx} className="patternshift-inquiry-card">
+                    <p className="patternshift-inquiry-text">"{inquiry}"</p>
+                    <span className="patternshift-inquiry-label">Prompt {idx + 1}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Tag & Mood Correlation Matrix (Deterministic) */}
           {(insight.metrics?.tags?.tagMoodAssociations || []).length > 0 && (
-            <div
-              id="patternshift-tag-associations"
-              className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-3"
-            >
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Tag className="w-4 h-4 text-emerald-600" />
-                <span>Tag & Mood Correlations</span>
-              </h3>
-              <p className="text-xs text-slate-500">
+            <div className="patternshift-correlations">
+              <div className="patternshift-section-header">
+                <h3 className="patternshift-section-title">
+                  <Tag className="w-4 h-4 text-emerald-600" />
+                  <span>Tag & Mood Correlations</span>
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">
                 Average mood ratings recorded on days with specific tags.
               </p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+              <div className="patternshift-correlation-grid">
                 {insight.metrics.tags.tagMoodAssociations.slice(0, 8).map((assoc) => (
-                  <div
-                    key={assoc.tag}
-                    className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between"
-                  >
-                    <span className="text-xs font-medium text-slate-700 truncate mr-2">
-                      #{assoc.tag}
-                    </span>
-                    <span className="text-xs font-bold text-indigo-700 font-mono shrink-0">
+                  <div key={assoc.tag} className="patternshift-correlation-item">
+                    <span className="patternshift-correlation-tag">#{assoc.tag}</span>
+                    <span className="patternshift-correlation-value">
                       {assoc.averageMood.toFixed(1)} ★
                     </span>
                   </div>

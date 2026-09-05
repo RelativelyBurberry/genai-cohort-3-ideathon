@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, X, Plus, AlertCircle, Sparkles, BookOpen } from 'lucide-react';
+import { Save, X, Plus, AlertCircle } from 'lucide-react';
 import { MoodSelector } from './MoodSelector';
 import { calculateWordCount, normalizeTags, validateJournalEntryInput } from '../../utils/journal';
 import type { JournalEntry, CreateJournalEntryInput } from '../../types/journal';
@@ -26,6 +26,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const wordCount = calculateWordCount(content);
+  const isEdit = Boolean(initialEntry?.id);
 
   const handleAddTag = () => {
     const raw = tagInput.trim();
@@ -77,132 +78,115 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     } catch (err: any) {
       // Preserve unsaved draft and present non-sensitive error
       setSaveError(
-        err.message || 'Unable to save your reflection to Firestore. Your draft has been preserved.'
+        err.message || 'Unable to save your reflection. Your draft has been preserved.'
       );
     }
   };
 
   return (
-    <div id="journal-editor-container" className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-      {/* Editor Header */}
-      <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center">
-            <BookOpen className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-slate-900 text-sm">
-              {initialEntry ? 'Edit Reflection' : 'New Personal Reflection'}
-            </h2>
-            <p className="text-xs text-slate-500">
-              Private and isolated in your authenticated Firestore vault
-            </p>
-          </div>
-        </div>
+    <div className="journal-page editor">
+      <form onSubmit={handleSubmit} className="journal-editor" noValidate>
+        <p className="journal-editor-eyebrow">
+          {isEdit ? 'Edit Reflection' : 'New Reflection'}
+        </p>
+        <h2 className="journal-editor-prompt">
+          {isEdit ? <>Refine what you wrote.</> : <>What is on your <em>mind?</em></>}
+        </h2>
 
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={isSaving}
-          className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-          title="Cancel"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
         {/* Error Banners */}
         {validationError && (
-          <div className="flex items-center gap-2.5 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs animate-shake">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-            <span>{validationError}</span>
-          </div>
-        )}
-
-        {saveError && (
-          <div className="flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
-            <div>
-              <p className="font-semibold">{saveError}</p>
-              <p className="text-rose-600 mt-0.5">Your input is preserved above. You can try saving again.</p>
+          <div className="journal-editor-error" role="alert" aria-live="assertive">
+            <AlertCircle className="journal-editor-error-icon" aria-hidden="true" />
+            <div className="journal-editor-error-body">
+              <strong>{validationError}</strong>
             </div>
           </div>
         )}
 
-        {/* Optional Title Input */}
-        <div>
-          <label htmlFor="entry-title" className="block text-xs font-semibold text-slate-700 tracking-wide mb-1.5">
-            TITLE (OPTIONAL)
-          </label>
-          <input
-            id="entry-title"
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={isSaving}
-            placeholder="Give this reflection a title, or leave empty..."
-            maxLength={140}
-            className="w-full px-4 py-2.5 bg-slate-50/60 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
-          />
+        {saveError && (
+          <div className="journal-editor-error" role="alert" aria-live="assertive">
+            <AlertCircle className="journal-editor-error-icon" aria-hidden="true" />
+            <div className="journal-editor-error-body">
+              <strong>{saveError}</strong>
+              <small>Your input is preserved below. You can try saving again.</small>
+            </div>
+          </div>
+        )}
+
+        {/* Title */}
+        <label htmlFor="entry-title" className="sr-only" style={{ position: 'absolute', left: '-9999px' }}>
+          Reflection title (optional)
+        </label>
+        <input
+          id="entry-title"
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          disabled={isSaving}
+          placeholder="A title, or leave it quietly untitled…"
+          maxLength={140}
+          className="journal-editor-title"
+        />
+
+        {/* Content */}
+        <label htmlFor="entry-content" className="sr-only" style={{ position: 'absolute', left: '-9999px' }}>
+          Reflection content (required)
+        </label>
+        <textarea
+          id="entry-content"
+          value={content}
+          onChange={(e) => {
+            setContent(e.target.value);
+            if (validationError) setValidationError(null);
+          }}
+          disabled={isSaving}
+          rows={14}
+          placeholder="Start wherever you are…"
+          className="journal-editor-textarea"
+          aria-required="true"
+        />
+
+        <div className="journal-editor-stats" aria-live="polite">
+          <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+          <span>{content.length} characters</span>
+        </div>
+
+        <div className="journal-editor-divider" aria-hidden="true">
+          <span>How are you feeling?</span>
         </div>
 
         {/* Mood Selector Component */}
         <MoodSelector value={moodRating} onChange={setMoodRating} disabled={isSaving} />
 
-        {/* Content Textarea */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label htmlFor="entry-content" className="block text-xs font-semibold text-slate-700 tracking-wide">
-              REFLECTION CONTENT <span className="text-rose-500">*</span>
-            </label>
-            <div className="flex items-center gap-3 text-xs text-slate-500">
-              <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-              <span>•</span>
-              <span>{content.length} characters</span>
-            </div>
-          </div>
-
-          <textarea
-            id="entry-content"
-            value={content}
-            onChange={(e) => {
-              setContent(e.target.value);
-              if (validationError) setValidationError(null);
-            }}
-            disabled={isSaving}
-            rows={10}
-            placeholder="Write your thoughts freely. What was meaningful today? What challenges or insights did you experience?"
-            className="w-full px-4 py-3.5 bg-slate-50/60 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition leading-relaxed resize-y font-normal"
-          />
+        <div className="journal-editor-divider" aria-hidden="true">
+          <span>Add a thought or theme</span>
         </div>
 
         {/* Tags Section */}
-        <div>
-          <label htmlFor="entry-tags-input" className="block text-xs font-semibold text-slate-700 tracking-wide mb-1.5">
-            TAGS & THEMES (OPTIONAL)
-          </label>
+        <div className="journal-tags-section">
+          {tags.length > 0 && (
+            <div className="journal-tags-list" aria-label="Selected tags">
+              {tags.map((tag) => (
+                <span key={tag} className="journal-tag-pill">
+                  <span>{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    disabled={isSaving}
+                    className="journal-tag-remove"
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    <X style={{ width: '0.75rem', height: '0.75rem' }} aria-hidden="true" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
-          <div className="flex flex-wrap items-center gap-2 mb-2.5">
-            {tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700"
-              >
-                #{tag}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveTag(tag)}
-                  disabled={isSaving}
-                  className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="journal-tag-input-row">
+            <label htmlFor="entry-tags-input" className="sr-only" style={{ position: 'absolute', left: '-9999px' }}>
+              Add a tag (optional)
+            </label>
             <input
               id="entry-tags-input"
               type="text"
@@ -210,30 +194,31 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={handleTagKeyDown}
               disabled={isSaving}
-              placeholder="Add a tag (press Enter or comma)... e.g. mindfulness, work, gratitude"
-              className="flex-1 px-4 py-2 bg-slate-50/60 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
+              placeholder="press Enter or comma to add…"
+              className="journal-tag-input"
             />
             <button
               type="button"
               id="btn-add-tag"
               onClick={handleAddTag}
               disabled={isSaving || !tagInput.trim()}
-              className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-medium text-slate-700 disabled:opacity-40 transition cursor-pointer"
+              className="journal-tag-add"
+              aria-label="Add tag"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus style={{ width: '0.875rem', height: '0.875rem' }} aria-hidden="true" />
               <span>Add</span>
             </button>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+        <div className="journal-editor-actions">
           <button
             type="button"
             id="btn-cancel-editor"
             onClick={onCancel}
             disabled={isSaving}
-            className="px-4 py-2.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            className="journal-editor-secondary"
           >
             Cancel
           </button>
@@ -242,17 +227,21 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             type="submit"
             id="btn-save-entry"
             disabled={isSaving || content.trim().length === 0}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+            className="journal-editor-primary"
           >
             {isSaving ? (
               <>
-                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Saving Reflection...</span>
+                <span
+                  className="journal-modal-spinner"
+                  aria-hidden="true"
+                  style={{ borderTopColor: 'var(--color-primary-foreground)' }}
+                />
+                <span>Saving…</span>
               </>
             ) : (
               <>
-                <Save className="w-3.5 h-3.5" />
-                <span>Save Reflection</span>
+                <Save style={{ width: '0.875rem', height: '0.875rem' }} aria-hidden="true" />
+                <span>{isEdit ? 'Update reflection' : 'Save reflection'}</span>
               </>
             )}
           </button>

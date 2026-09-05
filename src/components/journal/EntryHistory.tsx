@@ -1,8 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Plus, BookOpen, Sparkles, Frown } from 'lucide-react';
+import { Search, Plus, Trash2, RefreshCw } from 'lucide-react';
 import type { JournalEntry } from '../../types/journal';
-import { EntryCard } from './EntryCard';
 import { CANONICAL_MOOD_RATINGS, getMoodDescriptor } from '../../utils/journal';
+
+// JS-side map for inline color styles — the utility returns Tailwind classes.
+const MOOD_DOT_HEX: Record<number, string> = {
+  1: '#f43f5e', // rose-500
+  2: '#f59e0b', // amber-500
+  3: '#64748b', // slate-500
+  4: '#14b8a6', // teal-500
+  5: '#10b981', // emerald-500
+};
 
 interface EntryHistoryProps {
   entries: JournalEntry[];
@@ -12,6 +20,27 @@ interface EntryHistoryProps {
   onNewEntry: () => void;
   onDeleteRequest: (entry: JournalEntry) => void;
   onRetry: () => void;
+}
+
+function getEntryDate(timestamp: JournalEntry['createdAt']): Date | null {
+  if (!timestamp) return null;
+  if (typeof (timestamp as any).toDate === 'function') {
+    return (timestamp as any).toDate();
+  }
+  if (timestamp instanceof Date) return timestamp;
+  return null;
+}
+
+function monthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function dayLabel(date: Date): string {
+  return date.toLocaleDateString('en-US', { weekday: 'long' });
 }
 
 export const EntryHistory: React.FC<EntryHistoryProps> = ({
@@ -34,10 +63,9 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
     return Array.from(set).sort();
   }, [entries]);
 
-  // Filter entries
+  // Filter entries (preserves existing filter logic exactly)
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
-      // Search filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = entry.title?.toLowerCase().includes(q);
@@ -46,12 +74,10 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
         if (!matchesTitle && !matchesContent && !matchesTags) return false;
       }
 
-      // Tag filter
       if (selectedTag && (!entry.tags || !entry.tags.includes(selectedTag))) {
         return false;
       }
 
-      // Mood filter
       if (selectedMood !== null && entry.moodRating !== selectedMood) {
         return false;
       }
@@ -60,21 +86,51 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
     });
   }, [entries, searchQuery, selectedTag, selectedMood]);
 
+  const hasActiveFilters =
+    selectedTag !== null || selectedMood !== null || searchQuery.trim().length > 0;
+
+  const clearAllFilters = () => {
+    setSelectedTag(null);
+    setSelectedMood(null);
+    setSearchQuery('');
+  };
+
+  // Group filtered entries by month for archival feel (presentation only — no data change)
+  const groupedEntries = useMemo(() => {
+    const map = new Map<string, { label: string; items: JournalEntry[] }>();
+
+    filteredEntries.forEach((entry) => {
+      const d = getEntryDate(entry.createdAt) ?? new Date();
+      const key = monthKey(d);
+      if (!map.has(key)) {
+        map.set(key, { label: monthLabel(d), items: [] });
+      }
+      map.get(key)!.items.push(entry);
+    });
+
+    return Array.from(map.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([key, value]) => ({ key, label: value.label, items: value.items }));
+  }, [filteredEntries]);
+
   // Loading skeleton
   if (loading) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="h-6 w-36 bg-slate-200 rounded animate-pulse" />
-          <div className="h-9 w-32 bg-slate-200 rounded-xl animate-pulse" />
+      <div className="journal-loading" aria-busy="true" aria-live="polite">
+        <div className="journal-loading-header">
+          <div className="journal-loading-skeleton" style={{ height: '0.875rem', width: '7rem' }} />
+          <div className="journal-loading-skeleton" style={{ height: '3.5rem', width: '24rem', maxWidth: '100%' }} />
+          <div className="journal-loading-skeleton" style={{ height: '1rem', width: '18rem', maxWidth: '100%' }} />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="journal-loading-rows">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-44 bg-white border border-slate-200 rounded-2xl p-5 space-y-3 animate-pulse">
-              <div className="h-4 w-24 bg-slate-100 rounded" />
-              <div className="h-5 w-3/4 bg-slate-200 rounded" />
-              <div className="h-12 w-full bg-slate-100 rounded" />
-              <div className="h-4 w-1/3 bg-slate-100 rounded" />
+            <div key={i} className="journal-loading-row">
+              <div className="journal-loading-skeleton" style={{ height: '2.5rem', width: '3rem' }} />
+              <div className="journal-loading-row-body">
+                <div className="journal-loading-skeleton" style={{ height: '1.25rem', width: '65%' }} />
+                <div className="journal-loading-skeleton" style={{ height: '0.875rem', width: '95%' }} />
+                <div className="journal-loading-skeleton" style={{ height: '0.875rem', width: '75%' }} />
+              </div>
             </div>
           ))}
         </div>
@@ -85,22 +141,25 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
   // Error state
   if (error) {
     return (
-      <div className="bg-white border border-rose-200 rounded-2xl p-8 text-center space-y-4">
-        <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
-          <Frown className="w-6 h-6" />
+      <div className="journal-error" role="alert" aria-live="assertive">
+        <div className="journal-error-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
         </div>
-        <div>
-          <h3 className="font-semibold text-slate-900 text-base">Unable to Load Reflections</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-            An error occurred while connecting to your private Firestore vault: {error}
-          </p>
-        </div>
+        <h3 className="journal-error-title">Your journal could not be loaded</h3>
+        <p className="journal-error-copy">
+          {error}
+        </p>
         <button
           type="button"
           onClick={onRetry}
-          className="px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+          className="journal-error-retry"
         >
-          Retry Connection
+          <RefreshCw style={{ width: '0.875rem', height: '0.875rem' }} aria-hidden="true" />
+          <span>Try again</span>
         </button>
       </div>
     );
@@ -109,66 +168,105 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
   // Empty state (zero total entries in collection)
   if (entries.length === 0) {
     return (
-      <div id="journal-empty-state" className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-5">
-        <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center mx-auto shadow-xs">
-          <BookOpen className="w-7 h-7" />
+      <>
+        <div className="journal-header">
+          <div className="journal-header-text">
+            <p className="journal-eyebrow">My Journal</p>
+            <h1 className="journal-title">
+              A place for your <em>thoughts.</em>
+            </h1>
+            <p className="journal-subtitle">Small moments, held in one place.</p>
+          </div>
+          <div className="journal-header-meta">
+            <div className="journal-count" aria-label="Total reflections">
+              Reflections
+              <strong>0</strong>
+            </div>
+            <button
+              type="button"
+              id="btn-create-first-entry"
+              onClick={onNewEntry}
+              className="journal-cta"
+            >
+              <span>Write something</span>
+              <span className="journal-cta-arrow" aria-hidden="true">→</span>
+            </button>
+          </div>
         </div>
-        <div className="space-y-1.5 max-w-sm mx-auto">
-          <h3 className="font-semibold text-slate-900 text-lg">Your Journal is Empty</h3>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Reflectra is your private space for mindful reflection. Record your thoughts, emotions, and experiences in your secure personal vault.
+        <div id="journal-empty-state" className="journal-empty">
+          <p className="journal-empty-eyebrow">My Journal</p>
+          <h2 className="journal-empty-title">
+            Nothing written <em>yet.</em>
+          </h2>
+          <p className="journal-empty-copy">
+            Your thoughts don’t need to be profound to deserve a place.
           </p>
+          <button
+            type="button"
+            onClick={onNewEntry}
+            className="journal-empty-action"
+          >
+            <span>Write your first reflection</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <div className="journal-empty-divider" aria-hidden="true" />
+          <p className="journal-empty-quiet">Begin wherever you are.</p>
         </div>
-        <button
-          type="button"
-          id="btn-create-first-entry"
-          onClick={onNewEntry}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Write Your First Reflection</span>
-        </button>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-5">
-      {/* Search & Filter Header Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              id="input-search-entries"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search reflections by keywords, title, or tags..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
-            />
+    <>
+      <div className="journal-header">
+        <div className="journal-header-text">
+          <p className="journal-eyebrow">My Journal</p>
+          <h1 className="journal-title">
+            A place for your <em>thoughts.</em>
+          </h1>
+          <p className="journal-subtitle">Small moments, held in one place.</p>
+        </div>
+        <div className="journal-header-meta">
+          <div className="journal-count" aria-label="Total reflections">
+            Reflections
+            <strong>{entries.length}</strong>
           </div>
-
-          {/* New Reflection Button */}
           <button
             type="button"
             id="btn-new-entry-header"
             onClick={onNewEntry}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer shrink-0"
+            className="journal-cta"
           >
-            <Plus className="w-4 h-4" />
-            <span>New Reflection</span>
+            <Plus style={{ width: '1rem', height: '1rem' }} aria-hidden="true" />
+            <span>Write something</span>
           </button>
         </div>
+      </div>
 
-        {/* Tag and Mood Filter Chips */}
-        {(allTags.length > 0 || selectedMood !== null || selectedTag !== null) && (
-          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1 mr-1">
-              <Filter className="w-3 h-3" />
-              <span>Filters:</span>
-            </span>
+      {/* Search & Filter Toolbar */}
+      <div className="journal-toolbar" role="search">
+        <div className="journal-search">
+          <span className="journal-search-icon" aria-hidden="true">
+            <Search style={{ width: '1rem', height: '1rem' }} />
+          </span>
+          <input
+            id="input-search-entries"
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search your thoughts…"
+            className="journal-search-input"
+            aria-label="Search journal entries"
+          />
+        </div>
+
+        {(allTags.length > 0 || hasActiveFilters) && (
+          <div
+            className="journal-filters"
+            role="group"
+            aria-label="Filter journal entries by mood or tag"
+          >
+            <span className="journal-filter-label">Filter by</span>
 
             {/* Mood filters using canonical Reflectra vocabulary */}
             {CANONICAL_MOOD_RATINGS.map((m) => {
@@ -180,16 +278,13 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
                   id={`filter-mood-${m}`}
                   type="button"
                   onClick={() => setSelectedMood(isSelected ? null : m)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition cursor-pointer inline-flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                  }`}
+                  className="journal-filter-chip"
+                  aria-pressed={isSelected}
                 >
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isSelected ? 'bg-white' : descriptor.dotColor
-                    }`}
+                    className="journal-filter-chip-dot"
+                    style={{ backgroundColor: MOOD_DOT_HEX[m] }}
+                    aria-hidden="true"
                   />
                   <span>{descriptor.label}</span>
                 </button>
@@ -202,59 +297,141 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
                 key={tag}
                 type="button"
                 onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition cursor-pointer ${
-                  selectedTag === tag
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                }`}
+                className="journal-filter-chip"
+                aria-pressed={selectedTag === tag}
               >
-                #{tag}
+                <span>#{tag}</span>
               </button>
             ))}
 
-            {(selectedTag !== null || selectedMood !== null || searchQuery) && (
+            {hasActiveFilters && (
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedTag(null);
-                  setSelectedMood(null);
-                  setSearchQuery('');
-                }}
-                className="text-slate-400 hover:text-slate-700 text-[11px] underline cursor-pointer ml-1"
+                onClick={clearAllFilters}
+                className="journal-filter-clear"
+                aria-label="Clear all filters"
               >
-                Clear all
+                Clear filters
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* Counter & Status */}
-      <div className="flex items-center justify-between px-1 text-xs text-slate-500 font-medium">
-        <span>
-          Showing {filteredEntries.length} of {entries.length}{' '}
-          {entries.length === 1 ? 'reflection' : 'reflections'}
-        </span>
+      <div className="journal-counter" aria-live="polite">
+        {hasActiveFilters ? (
+          <>Showing <strong>{filteredEntries.length}</strong> of {entries.length} reflections</>
+        ) : (
+          <>{entries.length} {entries.length === 1 ? 'reflection' : 'reflections'} archived</>
+        )}
       </div>
 
-      {/* Entries List / Grid */}
+      {/* Entries Archive */}
       {filteredEntries.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-2">
-          <p className="text-sm font-medium text-slate-700">No reflections matched your search</p>
-          <p className="text-xs text-slate-400">Try adjusting your search terms or filter selections.</p>
+        <div className="journal-no-results" role="status">
+          <h3 className="journal-no-results-title">No moments found here.</h3>
+          <p className="journal-no-results-copy">
+            Try a softer search, or step back and read the room.
+          </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="journal-no-results-action"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredEntries.map((entry) => (
-            <EntryCard
-              key={entry.id}
-              entry={entry}
-              onSelect={onSelectEntry}
-              onDeleteRequest={onDeleteRequest}
-            />
+        <div className="journal-archive" role="list">
+          {groupedEntries.map((group) => (
+            <section key={group.key} className="journal-month-group" aria-label={group.label}>
+              <h2 className="journal-month-label">
+                <strong>{group.label}</strong>
+              </h2>
+              <div className="journal-entries" role="list">
+                {group.items.map((entry) => {
+                  const descriptor = getMoodDescriptor(entry.moodRating);
+                  const date = getEntryDate(entry.createdAt) ?? new Date();
+                  const day = date.getDate();
+                  const weekday = dayLabel(date);
+                  const displayTitle =
+                    entry.title ||
+                    (entry.content.length > 60
+                      ? entry.content.substring(0, 60).trim() + '…'
+                      : entry.content);
+                  return (
+                    <div
+                      key={entry.id}
+                      id={`entry-card-${entry.id}`}
+                      role="listitem"
+                      className="journal-entry-row"
+                      onClick={() => onSelectEntry(entry)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectEntry(entry);
+                        }
+                      }}
+                      tabIndex={0}
+                    >
+                      <div className="journal-entry-date" aria-hidden="true">
+                        <span className="journal-entry-day">{day}</span>
+                        <span className="journal-entry-weekday">{weekday}</span>
+                      </div>
+                      <div className="journal-entry-body">
+                        <h3 className="journal-entry-title">{displayTitle}</h3>
+                        <p className="journal-entry-excerpt">{entry.content}</p>
+                        <div className="journal-entry-meta">
+                          <span className="journal-entry-mood" title={descriptor.description}>
+                            <span
+                              className="journal-filter-chip-dot"
+                              style={{ backgroundColor: MOOD_DOT_HEX[entry.moodRating] }}
+                              aria-hidden="true"
+                            />
+                            <span>{descriptor.label}</span>
+                          </span>
+                          {entry.tags && entry.tags.length > 0 && (
+                            <span className="journal-entry-tags">
+                              {entry.tags.slice(0, 3).map((tag) => (
+                                <span key={tag} className="journal-entry-tag">
+                                  {tag}
+                                </span>
+                              ))}
+                              {entry.tags.length > 3 && (
+                                <span className="journal-entry-tag" aria-label={`and ${entry.tags.length - 3} more`}>
+                                  +{entry.tags.length - 3}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="journal-entry-actions">
+                        <button
+                          type="button"
+                          id={`btn-delete-${entry.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteRequest(entry);
+                          }}
+                          className="journal-entry-delete"
+                          aria-label={`Delete reflection: ${displayTitle}`}
+                          title="Delete reflection"
+                        >
+                          <Trash2 style={{ width: '1rem', height: '1rem' }} aria-hidden="true" />
+                        </button>
+                        <span className="journal-entry-arrow" aria-hidden="true">→</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 };

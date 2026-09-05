@@ -179,14 +179,21 @@ export const GuidedReflectionDashboard: React.FC = () => {
   if (!isDemo && !user) return null;
 
   return (
-    <div id="guided-reflection-dashboard" className="flex-1 min-h-0 w-full flex flex-col overflow-hidden">
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full min-h-0 flex-1 overflow-hidden">
-        {/* Left Column: Conversation Sessions List */}
-        <div
-          className={`md:col-span-4 h-full min-h-0 flex flex-col overflow-hidden ${
-            activeConversation ? 'hidden md:block' : 'block'
-          }`}
-        >
+    <div id="guided-reflection-dashboard" className="guided-reflection-page">
+      {/* Header */}
+      <div className="guided-reflection-header">
+        <div className="guided-reflection-eyebrow">Guided Reflection</div>
+        <h1 className="guided-reflection-title">A private space to think out loud.</h1>
+        <p className="guided-reflection-subtitle">
+          Reflectra guides you through multi-turn personal introspection using secure, server-side AI. 
+          Select a past session or start a new reflection.
+        </p>
+      </div>
+
+      {/* Two-Column Layout */}
+      <div className="guided-reflection-layout">
+        {/* Left Column: Conversation Archive */}
+        <div className="reflection-archive">
           <ConversationList
             conversations={conversations}
             activeConversationId={activeConversationId}
@@ -197,12 +204,8 @@ export const GuidedReflectionDashboard: React.FC = () => {
           />
         </div>
 
-        {/* Right Column: Active Conversation Dialogue */}
-        <div
-          className={`md:col-span-8 h-full min-h-0 flex flex-col overflow-hidden ${
-            activeConversation ? 'block' : 'hidden md:block'
-          }`}
-        >
+        {/* Right Column: Active Conversation */}
+        <div className={`reflection-workspace ${activeConversation ? 'active' : ''}`}>
           {activeConversation ? (
             <ConversationView
               key={activeConversation.id}
@@ -215,24 +218,25 @@ export const GuidedReflectionDashboard: React.FC = () => {
               }}
             />
           ) : (
-            <div className="h-full bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col items-center justify-center p-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+            <div className="reflection-empty-state">
+              <div className="reflection-empty-icon">
                 <Sparkles className="w-6 h-6" />
               </div>
-              <div className="max-w-sm">
-                <h3 className="text-base font-bold text-slate-900">Guided Reflection Companion</h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Reflectra guides you through multi-turn personal introspection using secure, server-side AI. Select a past session or start a new reflection.
+              <div>
+                <h3 className="reflection-empty-title">Begin Your Reflection Journey</h3>
+                <p className="reflection-empty-description">
+                  Start a guided reflection to explore your thoughts with the help of Reflectra's 
+                  contemplative companion.
                 </p>
               </div>
               <button
                 type="button"
                 id="btn-empty-start-reflection"
                 onClick={handleStartNew}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer"
+                className="btn btn-primary"
               >
                 <Plus className="w-4 h-4" />
-                <span>Begin Guided Reflection</span>
+                <span>Begin a New Reflection</span>
               </button>
             </div>
           )}

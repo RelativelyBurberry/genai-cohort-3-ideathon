@@ -7,61 +7,54 @@ interface MoodSelectorProps {
   disabled?: boolean;
 }
 
+const MOOD_DOT_HEX: Record<number, string> = {
+  1: '#f43f5e',
+  2: '#f59e0b',
+  3: '#64748b',
+  4: '#14b8a6',
+  5: '#10b981',
+};
+
 export const MoodSelector: React.FC<MoodSelectorProps> = ({
   value,
   onChange,
   disabled = false,
 }) => {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-slate-700 tracking-wide">
-          HOW ARE YOU FEELING? (MOOD RATING)
-        </label>
-        {value >= 1 && value <= 5 && (
-          <span className="text-xs font-medium text-slate-500">
-            {getMoodDescriptor(value).label} — {getMoodDescriptor(value).description}
-          </span>
-        )}
-      </div>
+  const descriptor = value >= 1 && value <= 5 ? getMoodDescriptor(value) : null;
 
-      <div className="grid grid-cols-5 gap-2 sm:gap-3">
+  return (
+    <div className="journal-mood-section" role="radiogroup" aria-label="Mood rating">
+      <div className="journal-mood-options">
         {CANONICAL_MOOD_RATINGS.map((m) => {
           const isSelected = value === m;
-          const descriptor = getMoodDescriptor(m);
-
+          const moodDesc = getMoodDescriptor(m);
           return (
             <button
               key={m}
               id={`mood-btn-${m}`}
               type="button"
+              role="radio"
+              aria-checked={isSelected}
               disabled={disabled}
               onClick={() => onChange(m)}
-              className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all cursor-pointer ${
-                isSelected
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-xs scale-[1.02]'
-                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:border-slate-300'
-              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className="journal-mood-option"
+              title={moodDesc.description}
             >
-              <div className="flex items-center gap-1.5 mb-1">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    isSelected ? 'bg-white' : descriptor.dotColor
-                  }`}
-                />
-                <span className="font-semibold text-sm">{m}</span>
-              </div>
               <span
-                className={`text-[11px] font-medium truncate max-w-full ${
-                  isSelected ? 'text-slate-200' : 'text-slate-500'
-                }`}
-              >
-                {descriptor.label}
-              </span>
+                className="journal-mood-option-dot"
+                style={{ backgroundColor: MOOD_DOT_HEX[m] }}
+                aria-hidden="true"
+              />
+              <span className="journal-mood-option-label">{moodDesc.label}</span>
             </button>
           );
         })}
       </div>
+      {descriptor && (
+        <div className="journal-mood-description" aria-live="polite">
+          {descriptor.description}
+        </div>
+      )}
     </div>
   );
 };

@@ -266,42 +266,33 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   };
 
   return (
-    <div id="conversation-view" className="flex flex-col h-full min-h-0 bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+    <div id="conversation-view" className="reflection-workspace">
       {/* Header */}
-      <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/50 shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="reflection-workspace-header">
+        <div className="reflection-workspace-header-left">
           {onBack && (
             <button
               type="button"
               id="btn-back-to-conversations"
               onClick={onBack}
-              className="p-1 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200/60 transition cursor-pointer md:hidden"
+              className="reflection-back-btn"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
           )}
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900 truncate">
-                {conversation.title}
-              </h2>
-              {isCompleted ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                  <span>Completed & Saved</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                  <span>Active Session</span>
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-500">
-              {isCompleted ? 'Reflection archived and summarized' : 'Multi-turn contemplative dialogue'}
-            </p>
-          </div>
+          <h2 className="reflection-workspace-title">{conversation.title}</h2>
+          {isCompleted ? (
+            <span className="reflection-status-badge completed">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Completed & Saved</span>
+            </span>
+          ) : (
+            <span className="reflection-status-badge active">
+              <span className="reflection-status-dot-pulse" />
+              <span>Active Session</span>
+            </span>
+          )}
         </div>
 
         {/* End & Save Reflection Action */}
@@ -311,7 +302,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
             id="btn-end-save-reflection"
             onClick={handleSummarize}
             disabled={inFlightSummarize || inFlightReflection}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer shrink-0 disabled:opacity-50"
+            className="reflection-end-btn"
           >
             {inFlightSummarize ? (
               <>
@@ -329,7 +320,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       </div>
 
       {/* Message Feed Container */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
+      <div className="reflection-messages">
         {/* Crisis Support Guidance Banner if triggered */}
         {crisisTriggered && (
           <CrisisSupportCard onDismiss={() => setCrisisTriggered(false)} />
@@ -337,72 +328,60 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
 
         {/* Summarization Error Banner with Retry */}
         {summarizationError && (
-          <div
-            id="summarization-error-card"
-            className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in"
-          >
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{summarizationError}</span>
-            </div>
+          <div className="reflection-error">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <div style={{ flex: 1 }}>{summarizationError}</div>
             <button
               type="button"
               id="btn-retry-summary"
               onClick={handleSummarize}
               disabled={inFlightSummarize}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-rose-100 border border-rose-300 text-rose-800 rounded-lg text-xs font-medium transition cursor-pointer shrink-0"
+              className="reflection-retry-btn"
             >
               {inFlightSummarize ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
               ) : (
                 <RefreshCw className="w-3 h-3" />
               )}
-              <span>Retry Summary</span>
+              <span>Retry</span>
             </button>
           </div>
         )}
 
         {/* Completed Reflection Summary Card */}
         {isCompleted && conversation.summary && (
-          <div
-            id="conversation-summary-card"
-            className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-md space-y-3"
-          >
-            <div className="flex items-center justify-between border-b border-slate-700/80 pb-2.5">
-              <div className="flex items-center gap-2">
+          <div className="reflection-summary-card">
+            <div className="reflection-summary-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold tracking-wide uppercase text-slate-300">
-                    Reflection Summary & Discoveries
-                  </h3>
-                  <p className="text-[10px] text-slate-400">Synthesized by Reflectra companion</p>
+                  <h3 className="reflection-summary-title">Reflection Summary & Discoveries</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Synthesized by Reflectra companion</p>
                 </div>
               </div>
-              <span className="text-[10px] text-emerald-400 font-mono">Archived in Vault</span>
+              <span className="text-[10px] text-emerald-400 font-mono">Archived</span>
             </div>
 
-            <div className="text-xs leading-relaxed text-slate-200 space-y-2 whitespace-pre-wrap font-sans">
-              {conversation.summary}
-            </div>
+            <div className="reflection-summary-content">{conversation.summary}</div>
           </div>
         )}
 
         {/* Message Feed */}
         {loadingMessages ? (
-          <div className="py-12 flex flex-col items-center justify-center text-slate-400 space-y-2">
+          <div className="reflection-loading">
             <Loader2 className="w-5 h-5 animate-spin" />
             <span className="text-xs">Loading reflection history...</span>
           </div>
         ) : messages.length === 0 ? (
-          <div className="py-16 text-center space-y-3 max-w-md mx-auto">
-            <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center mx-auto">
+          <div className="reflection-empty-state">
+            <div className="reflection-empty-icon">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-900">Welcome to your reflection space</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              <h3 className="reflection-empty-title">Welcome to your reflection space</h3>
+              <p className="reflection-empty-description">
                 Reflectra is here to listen and help you unpack your thoughts without judgment or clinical diagnosis.
                 Share what is on your mind today.
               </p>
@@ -415,31 +394,21 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               <div
                 key={msg.id}
                 id={`message-bubble-${msg.id}`}
-                className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+                className={`reflection-message ${isUser ? 'user' : 'assistant'}`}
               >
                 {!isUser && (
-                  <div className="w-7 h-7 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <div className="reflection-avatar assistant">
+                    <Sparkles className="w-3.5 h-3.5" />
                   </div>
                 )}
 
-                <div
-                  className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 text-xs leading-relaxed ${
-                    isUser
-                      ? 'bg-slate-100 text-slate-900 border border-slate-200/80 rounded-tr-xs'
-                      : 'bg-white text-slate-800 border border-slate-200 shadow-xs rounded-tl-xs'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3 mb-1.5">
-                    <span className="text-[10px] font-semibold text-slate-400">
-                      {isUser ? 'You' : 'Reflectra'}
-                    </span>
-                  </div>
+                <div className="reflection-bubble">
+                  <div className="reflection-bubble-role">{isUser ? 'You' : 'Reflectra'}</div>
                   <div className="whitespace-pre-wrap">{msg.content}</div>
                 </div>
 
                 {isUser && (
-                  <div className="w-7 h-7 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="reflection-avatar user">
                     <User className="w-3.5 h-3.5" />
                   </div>
                 )}
@@ -450,12 +419,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
 
         {/* In-flight assistant contemplation */}
         {inFlightReflection && (
-          <div className="flex gap-3 justify-start animate-fade-in">
-            <div className="w-7 h-7 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+          <div className="reflection-message assistant">
+            <div className="reflection-avatar assistant">
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
             </div>
-            <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-xs p-4 text-xs text-slate-500 shadow-xs flex items-center gap-2">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-700" />
+            <div className="reflection-typing">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span>Reflectra is listening and contemplating your reflection...</span>
             </div>
           </div>
@@ -463,14 +432,11 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
 
         {/* Unanswered User Turn Retry Banner */}
         {hasUnansweredUserTurn && !inFlightReflection && (
-          <div
-            id="unanswered-turn-retry-card"
-            className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in shadow-2xs"
-          >
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="reflection-retry-banner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Clock className="w-4 h-4 shrink-0" />
               <span>
-                Your latest reflection is safely saved. Tap <strong>Retry Reflection</strong> to generate Reflectra's response.
+                Your latest reflection is safely saved. Tap <strong>Retry</strong> to generate Reflectra's response.
               </span>
             </div>
             <button
@@ -478,22 +444,22 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               id="btn-retry-reflection"
               onClick={handleRetryReflection}
               disabled={inFlightReflection || inFlightSummarize}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-800 hover:bg-amber-900 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 shadow-xs"
+              className="reflection-retry-btn"
             >
               {inFlightReflection ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <RefreshCw className="w-3.5 h-3.5" />
               )}
-              <span>Retry Reflection</span>
+              <span>Retry</span>
             </button>
           </div>
         )}
 
         {/* General Error Banner */}
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <div className="reflection-error">
+            <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
@@ -628,7 +594,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       </div>
 
       {/* Message Input Bar */}
-      <div className="p-4 border-t border-slate-100 bg-white shrink-0">
+      <div className="reflection-input-area">
         {isCompleted ? (
           <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -636,7 +602,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSendMessage} className="space-y-2">
-            <div className="relative">
+            <div className="reflection-input-form">
               <textarea
                 ref={inputRef}
                 id="input-reflection-message"
@@ -646,17 +612,17 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 disabled={inFlightReflection || inFlightSummarize || hasUnansweredUserTurn}
                 placeholder={
                   hasUnansweredUserTurn
-                    ? "Awaiting companion response to your saved reflection. Tap 'Retry Reflection' above if needed."
+                    ? "Awaiting companion response to your saved reflection. Tap 'Retry' above if needed."
                     : "Share your reflection, feeling, or observation... (Enter to send, Shift+Enter for newline)"
                 }
                 rows={2}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 text-xs text-slate-800 placeholder-slate-400 resize-none disabled:bg-slate-50 disabled:text-slate-500"
+                className="reflection-input-textarea"
               />
               <button
                 type="submit"
                 id="btn-send-reflection-message"
                 disabled={!inputText.trim() || inFlightReflection || inFlightSummarize || hasUnansweredUserTurn}
-                className="absolute right-2.5 bottom-3.5 p-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 text-white rounded-lg transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
+                className="reflection-send-btn"
                 title={hasUnansweredUserTurn ? "Awaiting reflection response" : "Send reflection"}
               >
                 {inFlightReflection ? (
@@ -666,7 +632,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
                 )}
               </button>
             </div>
-            <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+            <div className="reflection-input-hint">
               <span>
                 {hasUnansweredUserTurn
                   ? "Previous reflection safely saved in Firestore."
