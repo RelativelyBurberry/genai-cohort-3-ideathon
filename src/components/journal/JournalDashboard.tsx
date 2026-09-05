@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BookOpen, Plus, Heart, Feather, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useDemo, useIsDemoSession } from '../../demo';
 import type { JournalEntry, CreateJournalEntryInput } from '../../types/journal';
 import {
   createJournalEntry,
@@ -17,6 +18,15 @@ type ViewMode = 'list' | 'create' | 'detail' | 'edit';
 
 export const JournalDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { 
+    isDemoSession, 
+    demoJournalEntries, 
+    createDemoJournalEntry, 
+    updateDemoJournalEntry, 
+    deleteDemoJournalEntry 
+  } = useDemo();
+  const isDemo = useIsDemoSession();
+  
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +53,18 @@ export const JournalDashboard: React.FC = () => {
     }
   }, [statusNotification]);
 
-  // Subscribe to authenticated user's entries in Firestore
+  // Demo mode: use synthetic data from DemoContext
+  useEffect(() => {
+    if (isDemo) {
+      setEntries(demoJournalEntries);
+      setLoading(false);
+      return;
+    }
+  }, [isDemo, demoJournalEntries]);
+
+  // Subscribe to authenticated user's entries in Firestore (real mode only)
   const setupSubscription = useCallback(() => {
+    if (isDemo) return () => {};
     if (!user?.uid) return () => {};
 
     setLoading(true);
@@ -71,7 +91,7 @@ export const JournalDashboard: React.FC = () => {
     );
 
     return unsubscribe;
-  }, [user?.uid]);
+  }, [user?.uid, isDemo]);
 
   useEffect(() => {
     const unsub = setupSubscription();
@@ -97,27 +117,39 @@ export const JournalDashboard: React.FC = () => {
 
   // Create or Update Handler
   const handleSaveEntry = async (payload: CreateJournalEntryInput) => {
-    if (!user?.uid) {
+    if (!isDemo && !user?.uid) {
       throw new Error('Authentication session expired. Please sign in again.');
     }
 
     setIsSaving(true);
     try {
       if (viewMode === 'edit' && selectedEntry) {
-        if (!selectedEntry.createdAt) {
-          throw new Error('Missing creation timestamp for entry update.');
+        if (isDemo) {
+          await updateDemoJournalEntry(selectedEntry.id, payload);
+        } else {
+          if (!selectedEntry.createdAt) {
+            throw new Error('Missing creation timestamp for entry update.');
+          }
+          await updateJournalEntry(user.uid, selectedEntry.id, payload, selectedEntry.createdAt);
         }
-        await updateJournalEntry(user.uid, selectedEntry.id, payload, selectedEntry.createdAt);
         setStatusNotification({
           type: 'success',
-          message: 'Your reflection was updated successfully.',
+          message: isDemo 
+            ? 'Demo reflection updated (local only).' 
+            : 'Your reflection was updated successfully.',
         });
         setViewMode('detail');
       } else {
-        const newId = await createJournalEntry(user.uid, payload);
+        if (isDemo) {
+          await createDemoJournalEntry(payload);
+        } else {
+          await createJournalEntry(user.uid, payload);
+        }
         setStatusNotification({
           type: 'success',
-          message: 'Reflection saved to your private journal vault.',
+          message: isDemo 
+            ? 'Demo reflection created (local only).' 
+            : 'Reflection saved to your private journal vault.',
         });
         setViewMode('list');
       }
@@ -128,11 +160,16 @@ export const JournalDashboard: React.FC = () => {
 
   // Delete Handler
   const handleConfirmDelete = async () => {
-    if (!user?.uid || !entryToDelete) return;
+    if (!entryToDelete) return;
+    if (!isDemo && !user?.uid) return;
 
     setIsDeleting(true);
     try {
-      await deleteJournalEntry(user.uid, entryToDelete.id);
+      if (isDemo) {
+        await deleteDemoJournalEntry(entryToDelete.id);
+      } else {
+        await deleteJournalEntry(user.uid, entryToDelete.id);
+      }
       setStatusNotification({
         type: 'success',
         message: 'Reflection deleted.',

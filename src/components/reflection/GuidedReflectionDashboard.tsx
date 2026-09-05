@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import type { Conversation } from '../../types/reflection';
+import { useDemo, useIsDemoSession } from '../../demo';
+import type { Conversation, ReflectionMessage } from '../../types/reflection';
 import {
   subscribeToConversations,
   createConversation,
@@ -14,12 +15,35 @@ import { Sparkles, Plus } from 'lucide-react';
 
 export const GuidedReflectionDashboard: React.FC = () => {
   const { user, getIdToken } = useAuth();
+  const { 
+    isDemoSession, 
+    demoConversations, 
+    getDemoMessages, 
+    createDemoConversation, 
+    deleteDemoConversation,
+    sendDemoMessage 
+  } = useDemo();
+  const isDemo = useIsDemoSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [demoMessages, setDemoMessages] = useState<Record<string, ReflectionMessage[]>>({});
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Subscribe to all conversations for this authenticated user
+  // Demo mode: use synthetic conversations
   useEffect(() => {
+    if (isDemo) {
+      setConversations(demoConversations);
+      setLoading(false);
+      // Auto-select first conversation
+      if (demoConversations.length > 0 && !activeConversationId) {
+        setActiveConversationId(demoConversations[0].id);
+      }
+    }
+  }, [isDemo, demoConversations]);
+
+  // Subscribe to all conversations for this authenticated user (real mode)
+  useEffect(() => {
+    if (isDemo) return;
     if (!user) return;
 
     console.log(`[DIAG_SYNC_TRACE] stage: useEffect_listener_subscription_path | user.uid: ${user.uid}`);
@@ -74,9 +98,18 @@ export const GuidedReflectionDashboard: React.FC = () => {
       console.log(`[DIAG_SYNC_TRACE] stage: listener_unsubscribed | user.uid: ${user.uid}`);
       unsubscribe();
     };
-  }, [user]);
+  }, [user, isDemo]);
 
   const handleStartNew = async () => {
+    if (isDemo) {
+      try {
+        const newId = await createDemoConversation(`Reflection Session · ${new Date().toLocaleDateString()}`);
+        setActiveConversationId(newId);
+      } catch (err) {
+        console.error('[GuidedReflection] Failed to create demo conversation:', err);
+      }
+      return;
+    }
     if (!user) return;
     try {
       const newId = await createConversation(user.uid, `Reflection Session · ${new Date().toLocaleDateString()}`);
@@ -87,6 +120,19 @@ export const GuidedReflectionDashboard: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (isDemo) {
+      try {
+        await deleteDemoConversation(id);
+        setConversations(prev => prev.filter(c => c.id !== id));
+        if (activeConversationId === id) {
+          const remaining = conversations.filter(c => c.id !== id);
+          setActiveConversationId(remaining.length > 0 ? remaining[0].id : null);
+        }
+      } catch (err) {
+        console.error('[GuidedReflection] Failed to delete demo conversation:', err);
+      }
+      return;
+    }
     if (!user) return;
     try {
       console.log(`[DIAG_DELETE_STAGE] stage: delete_token_acquired | conversationId: ${id}`);
@@ -130,7 +176,7 @@ export const GuidedReflectionDashboard: React.FC = () => {
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
 
-  if (!user) return null;
+  if (!isDemo && !user) return null;
 
   return (
     <div id="guided-reflection-dashboard" className="flex-1 min-h-0 w-full flex flex-col overflow-hidden">
@@ -161,7 +207,7 @@ export const GuidedReflectionDashboard: React.FC = () => {
             <ConversationView
               key={activeConversation.id}
               conversation={activeConversation}
-              uid={user.uid}
+              uid={isDemo ? 'demo-user-local-preview' : user.uid}
               getIdToken={getIdToken}
               onBack={() => setActiveConversationId(null)}
               onConversationUpdated={() => {

@@ -20,6 +20,7 @@ import {
   requestSummarize,
 } from '../../services/reflectionService';
 import { CrisisSupportCard } from './CrisisSupportCard';
+import { useDemo, useIsDemoSession } from '../../demo';
 
 interface ConversationViewProps {
   conversation: Conversation;
@@ -36,6 +37,8 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   onBack,
   onConversationUpdated,
 }) => {
+  const { isDemoSession, getDemoMessages, sendDemoMessage } = useDemo();
+  const isDemo = useIsDemoSession();
   const [messages, setMessages] = useState<ReflectionMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState<boolean>(true);
   const [inputText, setInputText] = useState<string>('');
@@ -49,8 +52,15 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Real-time message subscription
+  // Message loading: demo mode vs real mode
   useEffect(() => {
+    if (isDemo) {
+      const demoMsgs = getDemoMessages(conversation.id);
+      setMessages(demoMsgs);
+      setLoadingMessages(false);
+      return;
+    }
+    
     setLoadingMessages(true);
     setErrorMessage(null);
     setSummarizationError(null);
@@ -69,7 +79,15 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     );
 
     return () => unsubscribe();
-  }, [uid, conversation.id]);
+  }, [uid, conversation.id, isDemo]);
+
+  // Keep demo messages in sync 
+  useEffect(() => {
+    if (isDemo) {
+      const demoMsgs = getDemoMessages(conversation.id);
+      setMessages(demoMsgs);
+    }
+  }, [isDemo, getDemoMessages, conversation.id]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -84,6 +102,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   // Idempotent retry: triggers POST /api/reflect reusing the existing unanswered user turn in Firestore
   const handleRetryReflection = async () => {
     if (inFlightReflection || inFlightSummarize || isCompleted) {
+      return;
+    }
+
+    // DEMO MODE: don't call real API
+    if (isDemo) {
+      setErrorMessage('Demo mode: AI reflection requires the backend. Responses shown are synthetic.');
       return;
     }
 
@@ -124,7 +148,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
     }
   };
 
-  // Send a user message and request Gemini reflection
+  // Send a user message and request Gemini reflection (or demo response)
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
@@ -139,6 +163,22 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
 
     const backupText = trimmed;
     setInputText('');
+
+    // DEMO MODE: local-only message exchange, no API calls
+    if (isDemo) {
+      try {
+        await sendDemoMessage(conversation.id, trimmed);
+        // Re-fetch demo messages
+        const updatedMsgs = getDemoMessages(conversation.id);
+        setMessages(updatedMsgs);
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Failed to send demo message.');
+        setInputText(backupText);
+      } finally {
+        setInFlightReflection(false);
+      }
+      return;
+    }
 
     try {
       // 1. Client writes user message directly to Firestore
@@ -182,6 +222,12 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   // Explicit "End & Save Reflection" summarization
   const handleSummarize = async () => {
     if (inFlightSummarize || isCompleted) {
+      return;
+    }
+
+    // DEMO MODE: show demo notice instead of real summarization
+    if (isDemo) {
+      setSummarizationError('Demo mode: Summarization requires the backend AI. This preview shows the conversation as-is.');
       return;
     }
 

@@ -1,0 +1,6 @@
+{
+    "exclude":  [
+                    "v0-reference/**"
+                ],
+    "extends":  "./tsconfig.json"
+}

@@ -16,11 +16,14 @@ import {
   Info,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useDemo, useIsDemoSession } from '../../demo';
 import { fetchLatestInsight, triggerPatternAnalysis } from '../../services/patternShiftService';
 import type { PatternShiftInsight, PatternShiftResponse } from '../../types/patternshift';
 
 export const PatternShiftDashboard: React.FC = () => {
   const { getIdToken } = useAuth();
+  const { isDemoSession, demoPatternInsight } = useDemo();
+  const isDemo = useIsDemoSession();
   const [insight, setInsight] = useState<PatternShiftInsight | null>(null);
   const [loadingLatest, setLoadingLatest] = useState<boolean>(true);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
@@ -30,8 +33,14 @@ export const PatternShiftDashboard: React.FC = () => {
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load existing persisted insight on mount
+  // Load existing persisted insight on mount (or demo insight)
   useEffect(() => {
+    if (isDemo) {
+      setInsight(demoPatternInsight);
+      setLoadingLatest(false);
+      return;
+    }
+
     let isMounted = true;
     async function loadLatest() {
       setLoadingLatest(true);
@@ -59,9 +68,18 @@ export const PatternShiftDashboard: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [getIdToken]);
+  }, [getIdToken, isDemo, demoPatternInsight]);
 
   const handleRunAnalysis = async () => {
+    // DEMO MODE: show demo notice instead of real analysis
+    if (isDemo) {
+      setErrorMessage('Demo mode: PatternShift analysis requires the backend. Showing synthetic demo insight.');
+      if (!insight && demoPatternInsight) {
+        setInsight(demoPatternInsight);
+      }
+      return;
+    }
+
     setAnalyzing(true);
     setErrorMessage(null);
     try {

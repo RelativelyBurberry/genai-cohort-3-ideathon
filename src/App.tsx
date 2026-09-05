@@ -1,11 +1,13 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { LandingPage } from './components/LandingPage';
+import { DemoProvider, useDemo, useIsDemoSession } from './demo';
+import { LandingPage } from './components/landing/LandingPage';
 import { AppShell } from './components/AppShell';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
   const { user, loading } = useAuth();
+  const { isDemoSession } = useDemo();
 
   if (loading) {
     return (
@@ -16,13 +18,20 @@ function AppContent() {
     );
   }
 
+  // Demo session takes precedence when active
+  if (isDemoSession) {
+    return <AppShell />;
+  }
+
   return user ? <AppShell /> : <LandingPage />;
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <DemoProvider>
+        <AppContent />
+      </DemoProvider>
     </AuthProvider>
   );
 }
