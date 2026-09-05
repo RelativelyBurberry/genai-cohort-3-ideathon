@@ -5859,3 +5859,503 @@ textarea.input,
     font-size: 2rem;
   }
 }
+
+/* ============================================================
+   SETTINGS & ACCOUNT EXPERIENCE — PHASE 8
+   Calm, editorial account and preferences area.
+   Single spacious column consistent with the Reflectra
+   design language established in Phases 2–6.
+   ============================================================ */
+
+.settings-view {
+  min-height: 100%;
+}
+
+.settings-page {
+  max-width: 720px; /* comfortable editorial reading column */
+}
+
+/* Section rhythm: generous spacing, clear grouping, no card walls */
+.settings-section {
+  margin-bottom: 3.25rem;
+}
+
+.settings-section-heading {
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-foreground);
+  margin: 0 0 1.125rem;
+}
+
+/* ----------------------------------------------------------------
+   Cards — shared surface treatment
+   ---------------------------------------------------------------- */
+.settings-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.875rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.settings-section-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.6875rem;
+  color: var(--color-subtle-foreground);
+  font-weight: 500;
+  margin: 0 0 0.875rem;
+}
+
+.settings-card-title {
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-foreground);
+  margin: 0 0 0.75rem;
+}
+
+.settings-card-copy {
+  color: var(--color-muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.settings-card-note {
+  color: var(--color-subtle-foreground);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0.875rem 0 0;
+}
+
+/* ----------------------------------------------------------------
+   Account card
+   ---------------------------------------------------------------- */
+.settings-account-card {
+  display: flex;
+  align-items: center;
+  gap: 1.375rem;
+}
+
+.settings-avatar {
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.settings-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  letter-spacing: 0.02em;
+}
+
+.settings-account-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.settings-account-name {
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-foreground);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-account-email {
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-account-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-success);
+  margin: 0.25rem 0 0;
+}
+
+.settings-account-status.preview {
+  color: var(--color-primary);
+}
+
+.settings-status-dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+/* ----------------------------------------------------------------
+   Workspace card
+   ---------------------------------------------------------------- */
+.settings-workspace-counts {
+  display: flex;
+  gap: 2.25rem;
+  margin: 1.375rem 0;
+  padding: 1rem 1.25rem;
+  background-color: var(--color-primary-soft);
+  border-radius: var(--radius-md);
+}
+
+.settings-workspace-count {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.settings-workspace-count-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-muted-foreground);
+  font-weight: 500;
+}
+
+.settings-workspace-count-value {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  color: var(--color-primary);
+  margin: 0;
+  line-height: 1;
+}
+
+.settings-feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 1.375rem 0 0;
+  display: grid;
+  gap: 0.875rem;
+}
+
+.settings-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem 1.125rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.settings-feature-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  background-color: var(--color-accent-soft);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.settings-feature-icon {
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
+
+.settings-feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.settings-feature-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-foreground);
+}
+
+.settings-feature-desc {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------
+   Privacy card
+   ---------------------------------------------------------------- */
+.settings-privacy-list {
+  list-style: none;
+  padding: 0;
+  margin: 1.375rem 0 0;
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.settings-privacy-item {
+  padding: 0.875rem 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--color-foreground);
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+}
+
+.settings-privacy-item::before {
+  content: '✦';
+  color: var(--color-accent);
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+
+.settings-privacy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  background: none;
+  border: 0;
+  padding: 0.25rem 0;
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-primary);
+  transition: opacity var(--duration-base) var(--ease-reflectra);
+}
+
+.settings-privacy-toggle:hover {
+  opacity: 0.75;
+}
+
+.settings-privacy-chevron {
+  width: 1rem;
+  height: 1rem;
+  transition: transform var(--duration-base) var(--ease-reflectra);
+}
+
+.settings-privacy-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.settings-privacy-details {
+  margin-top: 1.125rem;
+  padding: 1.125rem 1.25rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.875rem;
+}
+
+.settings-privacy-detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+}
+
+.settings-privacy-detail-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  color: var(--color-success);
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+/* ----------------------------------------------------------------
+   Security card
+   ---------------------------------------------------------------- */
+.settings-security-list {
+  list-style: none;
+  padding: 0;
+  margin: 1.375rem 0 0;
+  display: grid;
+  gap: 0.875rem;
+}
+
+.settings-security-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem 1.125rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.settings-security-icon {
+  width: 1.0625rem;
+  height: 1.0625rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.settings-security-text {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+}
+
+.settings-security-text strong {
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+
+/* ----------------------------------------------------------------
+   Appearance & portability cards
+   ---------------------------------------------------------------- */
+.settings-appearance-card,
+.settings-portability-card {
+  background-color: var(--color-surface-elevated);
+}
+
+/* ----------------------------------------------------------------
+   Sign-out card
+   ---------------------------------------------------------------- */
+.settings-section-actions {
+  margin-bottom: 1rem;
+  padding-top: 0.5rem;
+}
+
+.settings-signout-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+.settings-signout-copy {
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.settings-signout-button {
+  flex-shrink: 0;
+}
+
+.settings-signout-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ----------------------------------------------------------------
+   Reset demo dialog heading
+   ---------------------------------------------------------------- */
+.settings-reset-dialog-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-reset-dialog-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  background-color: var(--color-accent-soft);
+  color: var(--color-primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+/* ----------------------------------------------------------------
+   Responsive
+   ---------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .settings-page {
+    max-width: 640px;
+  }
+}
+
+@media (max-width: 768px) {
+  .settings-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .settings-card {
+    padding: 1.375rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .settings-page {
+    max-width: 100%;
+  }
+
+  .settings-section {
+    margin-bottom: 2.125rem;
+  }
+
+  .settings-account-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .settings-avatar {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .settings-account-name,
+  .settings-account-email {
+    white-space: normal;
+  }
+
+  .settings-workspace-counts {
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .settings-signout-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-signout-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Reduced motion — inherit global rules; explicit for hover elevation */
+@media (prefers-reduced-motion: reduce) {
+  .settings-privacy-chevron {
+    transition: none;
+  }
+}

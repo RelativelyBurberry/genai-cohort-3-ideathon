@@ -7,6 +7,10 @@ import { createServer as createViteServer } from 'vite';
 import { requireAuth, AuthenticatedRequest, logAuthConfigStartup } from './server/middleware/auth.js';
 import { reflectionRouter } from './server/routes/reflection.js';
 import { patternShiftRouter } from './server/routes/patternShift.js';
+import { initializeSecretProvider } from './server/config/secrets.js';
+
+// Initialize secret provider at startup
+initializeSecretProvider();
 
 const app = express();
 const PORT = 3000;

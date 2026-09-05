@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { getSecret, SECRET_NAMES } from '../config/secrets';
 
 /**
  * Server-side Gemini service for Reflectra.
@@ -10,6 +11,7 @@ import { GoogleGenAI } from '@google/genai';
  * 4. Treats user reflection text and retrieved history strictly as untrusted data using explicit structural delimiters.
  * 5. Refuses medical diagnosis, therapy claims, or behavioral categorization.
  * 6. Never logs prompts or completion text.
+ * 7. Secret retrieval uses centralized secret provider (environment variables or Google Cloud Secret Manager).
  */
 
 export interface ReflectionTurn {
@@ -24,23 +26,44 @@ export function getGeminiModelName(): string {
 }
 
 /**
- * Lazy initialization of GoogleGenAI client with fail-closed validation.
+ * Get the Gemini API key using the secret provider abstraction.
+ * This abstracts away whether the secret comes from environment variables or Secret Manager.
  */
-function getAiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const hasKey = Boolean(apiKey && apiKey.trim().length > 0);
-  console.log('[DIAG_GEMINI_INIT] Initializing GoogleGenAI client, apiKeyPresent:', hasKey, 'resolvedModel:', getGeminiModelName());
-  if (!hasKey) {
-    throw new Error('GEMINI_CONFIGURATION_ERROR: GEMINI_API_KEY server environment variable is not configured.');
+async function getGeminiApiKey(): Promise<string> {
+  try {
+    return await getSecret(SECRET_NAMES.GEMINI_API_KEY);
+  } catch (error: any) {
+    console.error('[DIAG_GEMINI_INIT] Failed to retrieve GEMINI_API_KEY from secret provider:', error.message);
+    throw new Error('GEMINI_CONFIGURATION_ERROR: GEMINI_API_KEY could not be retrieved from secret provider.');
   }
-  return new GoogleGenAI({
-    apiKey: apiKey!,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
+}
+
+/**
+ * Lazy initialization of GoogleGenAI client with fail-closed validation.
+ * Uses secret provider to retrieve API key (environment or Secret Manager).
+ */
+let aiClientPromise: Promise<GoogleGenAI> | null = null;
+
+async function getAiClient(): Promise<GoogleGenAI> {
+  if (aiClientPromise) {
+    return aiClientPromise;
+  }
+
+  aiClientPromise = (async () => {
+    const apiKey = await getGeminiApiKey();
+    const modelName = getGeminiModelName();
+    console.log('[DIAG_GEMINI_INIT] Initializing GoogleGenAI client, apiKeyPresent:', Boolean(apiKey), 'resolvedModel:', modelName);
+    return new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
       },
-    },
-  });
+    });
+  })();
+
+  return aiClientPromise;
 }
 
 const REFLECTRA_SYSTEM_INSTRUCTION = `You are Reflectra, a thoughtful, calm personal reflection companion.
@@ -126,7 +149,7 @@ function sanitizeNonClinicalText(text: string): string {
  * @returns Structured observations and open-ended inquiries.
  */
 export async function generatePatternShiftInsights(metrics: any): Promise<PatternShiftAiResult> {
-  const ai = getAiClient();
+  const ai = await getAiClient();
   const modelName = getGeminiModelName();
 
   const metricsJson = JSON.stringify(metrics, null, 2);
@@ -221,7 +244,7 @@ export async function generateReflectionResponse(
   history: ReflectionTurn[],
   latestUserMessage: string
 ): Promise<string> {
-  const ai = getAiClient();
+  const ai = await getAiClient();
   const modelName = getGeminiModelName();
 
   // Construct structured input with explicit delimiters to prevent prompt injection
@@ -290,7 +313,7 @@ Please provide your thoughtful, supportive reflection following your instruction
 export async function generateConversationSummary(
   messages: ReflectionTurn[]
 ): Promise<string> {
-  const ai = getAiClient();
+  const ai = await getAiClient();
   const modelName = getGeminiModelName();
 
   const conversationXml = messages
