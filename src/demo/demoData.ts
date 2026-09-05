@@ -2,6 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 import type { JournalEntry } from '../types/journal';
 import type { Conversation, ReflectionMessage } from '../types/reflection';
 import type { PatternShiftInsight } from '../types/patternshift';
+import type { EntryLocation } from '../types/location';
 
 /**
  * Demo Fixture Data
@@ -38,6 +39,11 @@ export const DEMO_JOURNAL_ENTRIES: JournalEntry[] = [
     crisisFlagged: false,
     createdAt: daysAgo(0), // Today
     updatedAt: daysAgo(0),
+    location: {
+      latitude: 40.7128,
+      longitude: -74.0060,
+      label: 'Brooklyn, New York',
+    },
   },
   {
     id: 'demo-entry-2',
@@ -71,6 +77,11 @@ export const DEMO_JOURNAL_ENTRIES: JournalEntry[] = [
     crisisFlagged: false,
     createdAt: daysAgo(5),
     updatedAt: daysAgo(5),
+    location: {
+      latitude: 51.5074,
+      longitude: -0.1278,
+      label: 'London, United Kingdom',
+    },
   },
   {
     id: 'demo-entry-5',
@@ -104,6 +115,11 @@ export const DEMO_JOURNAL_ENTRIES: JournalEntry[] = [
     crisisFlagged: false,
     createdAt: daysAgo(14),
     updatedAt: daysAgo(14),
+    location: {
+      latitude: 48.8566,
+      longitude: 2.3522,
+      label: 'Paris, France',
+    },
   },
 ];
 

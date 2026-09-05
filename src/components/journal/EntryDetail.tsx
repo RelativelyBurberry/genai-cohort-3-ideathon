@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft, Edit3, Trash2, Calendar, FileText, Tag, RefreshCw } from 'lucide-react';
 import type { JournalEntry } from '../../types/journal';
 import { formatEntryDate, getMoodDescriptor } from '../../utils/journal';
+import { EntryLocationDisplay } from '../location';
 
 interface EntryDetailProps {
   entry: JournalEntry;
@@ -80,6 +81,11 @@ export const EntryDetail: React.FC<EntryDetailProps> = ({
             </span>
           )}
         </div>
+
+        {/* Location display (Phase 9) */}
+        {entry.location && (
+          <EntryLocationDisplay location={entry.location} showMap={true} />
+        )}
 
         <div className="journal-reading-content">
           {entry.content}

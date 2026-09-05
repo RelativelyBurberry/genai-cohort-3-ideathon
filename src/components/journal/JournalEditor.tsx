@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Save, X, Plus, AlertCircle } from 'lucide-react';
 import { MoodSelector } from './MoodSelector';
+import { LocationPicker } from '../location';
 import { calculateWordCount, normalizeTags, validateJournalEntryInput } from '../../utils/journal';
 import type { JournalEntry, CreateJournalEntryInput } from '../../types/journal';
+import type { EntryLocation } from '../../types/location';
 
 interface JournalEditorProps {
   initialEntry?: JournalEntry | null;
@@ -22,6 +24,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [moodRating, setMoodRating] = useState<number>(initialEntry?.moodRating || 3);
   const [tags, setTags] = useState<string[]>(initialEntry?.tags || []);
   const [tagInput, setTagInput] = useState('');
+  const [location, setLocation] = useState<EntryLocation | null>(initialEntry?.location || null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -65,6 +68,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       content,
       moodRating,
       tags: finalTags,
+      location,
     };
 
     const check = validateJournalEntryInput(payload);
@@ -209,6 +213,18 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               <span>Add</span>
             </button>
           </div>
+        </div>
+
+        {/* Location Section (Phase 9) */}
+        <div className="journal-editor-divider" aria-hidden="true">
+          <span>Where did this happen?</span>
+        </div>
+        <div className="journal-location-section">
+          <LocationPicker
+            value={location}
+            onChange={setLocation}
+            disabled={isSaving}
+          />
         </div>
 
         {/* Action Controls */}

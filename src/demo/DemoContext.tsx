@@ -103,6 +103,7 @@ function loadDemoWorkspace(): DemoWorkspace {
           ...e,
           createdAt: e.createdAt ? Timestamp.fromDate(new Date(e.createdAt)) : null,
           updatedAt: e.updatedAt ? Timestamp.fromDate(new Date(e.updatedAt)) : null,
+          location: e.location || null,
         })),
         conversations: parsed.conversations.map((c: any) => ({
           ...c,
@@ -144,6 +145,7 @@ function saveDemoWorkspace(workspace: DemoWorkspace): void {
         ...e,
         createdAt: e.createdAt?.toDate().toISOString() || null,
         updatedAt: e.updatedAt?.toDate().toISOString() || null,
+        location: e.location || null,
       })),
       conversations: workspace.conversations.map(c => ({
         ...c,
@@ -236,6 +238,7 @@ export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children
       crisisFlagged: false,
       createdAt: now,
       updatedAt: now,
+      location: input.location || null,
     };
     setWorkspace(prev => ({
       ...prev,
@@ -257,6 +260,7 @@ export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children
             tags: input.tags || e.tags,
             wordCount: input.content.split(/\s+/).filter(Boolean).length,
             updatedAt: Timestamp.now(),
+            location: input.location !== undefined ? input.location : e.location,
           };
         }
         return e;

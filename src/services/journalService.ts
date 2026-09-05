@@ -62,6 +62,8 @@ export async function createJournalEntry(
     crisisFlagged: false, // Invariant: crisisFlagged cannot be set true by client in this milestone
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    // Optional location (Phase 9)
+    ...(input.location ? { location: input.location } : {}),
   };
 
   const docRef = await addDoc(entriesColRef, docData);
@@ -102,6 +104,8 @@ export async function updateJournalEntry(
     crisisFlagged: false,
     createdAt: originalCreatedAt,
     updatedAt: serverTimestamp(),
+    // Optional location (Phase 9) - include even if null to allow removal
+    location: input.location ?? null,
   });
 }
 
@@ -147,6 +151,8 @@ export function subscribeToJournalEntries(
           crisisFlagged: Boolean(data.crisisFlagged),
           createdAt: data.createdAt || null,
           updatedAt: data.updatedAt || null,
+          // Optional location (Phase 9)
+          location: data.location || null,
         };
       });
       onUpdate(entries);
@@ -181,6 +187,8 @@ export async function getJournalEntries(uid: string): Promise<JournalEntry[]> {
       crisisFlagged: Boolean(data.crisisFlagged),
       createdAt: data.createdAt || null,
       updatedAt: data.updatedAt || null,
+      // Optional location (Phase 9)
+      location: data.location || null,
     };
   });
 }

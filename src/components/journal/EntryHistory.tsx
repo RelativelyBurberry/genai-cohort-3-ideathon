@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Search, Plus, Trash2, RefreshCw, MapPin } from 'lucide-react';
 import type { JournalEntry } from '../../types/journal';
 import { CANONICAL_MOOD_RATINGS, getMoodDescriptor } from '../../utils/journal';
+import { formatLocationLabel } from '../../services/locationService';
 
 // JS-side map for inline color styles — the utility returns Tailwind classes.
 const MOOD_DOT_HEX: Record<number, string> = {
@@ -404,6 +405,14 @@ export const EntryHistory: React.FC<EntryHistoryProps> = ({
                                   +{entry.tags.length - 3}
                                 </span>
                               )}
+                            </span>
+                          )}
+                          
+                          {/* Location indicator (Phase 9) */}
+                          {entry.location && (
+                            <span className="journal-entry-location">
+                              <MapPin style={{ width: '0.75rem', height: '0.75rem' }} aria-hidden="true" />
+                              <span>{formatLocationLabel(entry.location, 25)}</span>
                             </span>
                           )}
                         </div>

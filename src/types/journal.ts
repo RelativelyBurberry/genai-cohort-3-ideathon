@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import type { EntryLocation } from './location';
 
 export interface JournalEntry {
   id: string;
@@ -10,6 +11,8 @@ export interface JournalEntry {
   crisisFlagged: boolean;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
+  /** Optional location attached to this entry (Phase 9) */
+  location?: EntryLocation | null;
 }
 
 export interface CreateJournalEntryInput {
@@ -17,6 +20,8 @@ export interface CreateJournalEntryInput {
   content: string;
   moodRating: number;
   tags?: string[];
+  /** Optional location attached to this entry (Phase 9) */
+  location?: EntryLocation | null;
 }
 
 export interface UpdateJournalEntryInput {
@@ -24,4 +29,6 @@ export interface UpdateJournalEntryInput {
   content: string;
   moodRating: number;
   tags?: string[];
+  /** Optional location attached to this entry (Phase 9) */
+  location?: EntryLocation | null;
 }

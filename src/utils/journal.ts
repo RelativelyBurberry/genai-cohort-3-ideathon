@@ -1,4 +1,37 @@
 import { Timestamp } from 'firebase/firestore';
+import type { EntryLocation } from '../types/location';
+
+/**
+ * Deterministically validates an optional location object.
+ * Returns true when location is absent (valid — location is always optional),
+ * or when it is a well-formed { latitude, longitude, label? } object.
+ */
+export function isValidLocation(location: unknown): boolean {
+  if (location === undefined || location === null) return true;
+
+  if (typeof location !== 'object') return false;
+
+  const loc = location as Record<string, unknown>;
+
+  if (typeof loc.latitude !== 'number' || Number.isNaN(loc.latitude)) return false;
+  if (typeof loc.longitude !== 'number' || Number.isNaN(loc.longitude)) return false;
+
+  if (loc.latitude < -90 || loc.latitude > 90) return false;
+  if (loc.longitude < -180 || loc.longitude > 180) return false;
+
+  if (loc.label !== undefined && loc.label !== null && typeof loc.label !== 'string') {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Formats coordinates into a compact human-readable string.
+ */
+export function formatCoordinates(latitude: number, longitude: number): string {
+  return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+}
 
 /**
  * Deterministically calculates word count from text content.
@@ -47,6 +80,7 @@ export function normalizeTags(rawTags: string[] | string | undefined | null): st
 export function validateJournalEntryInput(input: {
   content?: string | null;
   moodRating?: number | null;
+  location?: EntryLocation | null;
 }): { valid: boolean; error?: string } {
   if (!input.content || typeof input.content !== 'string' || input.content.trim().length === 0) {
     return {
@@ -66,6 +100,13 @@ export function validateJournalEntryInput(input: {
     return {
       valid: false,
       error: 'Please select a mood rating between 1 and 5.',
+    };
+  }
+
+  if (!isValidLocation(input.location ?? null)) {
+    return {
+      valid: false,
+      error: 'The attached location is invalid. Please reselect or remove it.',
     };
   }
 

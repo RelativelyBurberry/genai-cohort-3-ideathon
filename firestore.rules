@@ -13,6 +13,17 @@ service cloud.firestore {
       allow delete: if false; // Deletions handled exclusively via backend cascade endpoint
     }
 
+    // Helper: Validate optional location schema (Phase 9)
+    // Location is optional; when present it must be a valid coordinate object.
+    function isValidLocation(location) {
+      return location is map
+          && location.latitude is number
+          && location.longitude is number
+          && location.latitude >= -90 && location.latitude <= 90
+          && location.longitude >= -180 && location.longitude <= 180
+          && (!('label' in location) || location.label is string);
+    }
+
     // Helper: Validate entry schema & constraints
     function isValidEntry(data) {
       return data.title is string
@@ -22,7 +33,8 @@ service cloud.firestore {
           && data.tags is list
           && data.wordCount is number
           && data.wordCount >= 0
-          && data.crisisFlagged == false;
+          && data.crisisFlagged == false
+          && (!('location' in data) || isValidLocation(data.location));
     }
 
     // 2. Standalone Journal Entries (Client-owned raw data)

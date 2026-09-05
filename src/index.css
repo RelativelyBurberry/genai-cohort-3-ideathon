@@ -6359,3 +6359,597 @@ textarea.input,
     transition: none;
   }
 }
+
+/* ================================================================
+   PHASE 9 — Location-Aware Journal Entries
+   Privacy-conscious, editorial location support.
+   Uses Leaflet + OpenStreetMap (free, no API keys).
+   ================================================================ */
+
+/* ----------------------------------------------------------------
+   Location Picker — Journal Editor Integration
+   ---------------------------------------------------------------- */
+.journal-location-section {
+  margin-bottom: 0.5rem;
+}
+
+/* "Add a place" trigger button — the initial collapsed state */
+.location-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 1rem;
+  color: var(--journal-muted);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    color var(--duration-base) var(--ease-reflectra),
+    border-color var(--duration-base) var(--ease-reflectra),
+    background-color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-picker-trigger:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  color: var(--journal-ink);
+  background-color: rgba(222, 209, 199, 0.2);
+}
+
+.location-picker-trigger:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.location-picker-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.location-picker-optional {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--journal-subtle);
+  margin-left: 0.125rem;
+}
+
+/* Expanded picker panel */
+.location-picker-expanded {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  animation: location-picker-in var(--duration-slow) var(--ease-reflectra);
+}
+
+@keyframes location-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.location-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.location-picker-title {
+  font-family: var(--font-serif);
+  font-size: 0.9375rem;
+  font-style: italic;
+  color: var(--journal-ink);
+}
+
+.location-picker-close {
+  background: none;
+  border: 0;
+  color: var(--journal-subtle);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  transition: color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-picker-close:hover {
+  color: var(--journal-ink);
+}
+
+.location-picker-close:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Error message in picker */
+.location-picker-error {
+  background-color: rgba(156, 74, 74, 0.08);
+  color: var(--color-danger);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+/* Option buttons (use current / search) */
+.location-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  color: var(--journal-muted);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition:
+    color var(--duration-base) var(--ease-reflectra),
+    border-color var(--duration-base) var(--ease-reflectra),
+    background-color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-picker-option:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface-muted);
+  color: var(--journal-ink);
+}
+
+.location-picker-option:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.location-picker-option:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Spinner icon animation */
+.location-picker-spinner,
+.location-picker-spinner-small {
+  animation: location-spinner 1s linear infinite;
+}
+
+.location-picker-spinner {
+  width: 1rem;
+  height: 1rem;
+}
+
+.location-picker-spinner-small {
+  width: 1rem;
+  height: 1rem;
+}
+
+@keyframes location-spinner {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Divider */
+.location-picker-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--journal-subtle);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.8125rem;
+}
+
+.location-picker-divider::before,
+.location-picker-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
+/* Search row */
+.location-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.location-picker-search-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.5rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--journal-ink);
+  transition: border-color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-picker-search-input::placeholder {
+  color: var(--journal-subtle);
+  font-style: italic;
+  font-family: var(--font-serif);
+}
+
+.location-picker-search-input:hover {
+  border-bottom-color: var(--color-border-strong);
+}
+
+.location-picker-search-input:focus {
+  outline: none;
+  border-bottom-color: var(--journal-wine);
+}
+
+.location-picker-search-btn {
+  background: none;
+  border: 0;
+  color: var(--journal-wine);
+  cursor: pointer;
+  padding: 0.375rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.7;
+  transition: opacity var(--duration-base) var(--ease-reflectra);
+}
+
+.location-picker-search-btn:not(:disabled):hover {
+  opacity: 1;
+}
+
+.location-picker-search-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.location-picker-search-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Search results list */
+.location-picker-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.location-picker-results li {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.location-picker-results li:last-child {
+  border-bottom: 0;
+}
+
+.location-picker-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0.625rem 0.75rem;
+  color: var(--journal-muted);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color var(--duration-base) var(--ease-reflectra),
+    color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-picker-result:hover {
+  background-color: var(--color-surface-muted);
+  color: var(--journal-ink);
+}
+
+.location-picker-result:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Selected location preview (in editor) */
+.location-picker-selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--color-primary-soft);
+  border: 1px solid rgba(107, 59, 66, 0.15);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-family: var(--font-sans);
+  color: var(--journal-wine);
+}
+
+.location-picker-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: var(--journal-wine);
+  opacity: 0.7;
+}
+
+.location-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+.location-picker-remove {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-left: 0.25rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.6;
+  transition: opacity var(--duration-base) var(--ease-reflectra);
+}
+
+.location-picker-remove:hover {
+  opacity: 1;
+}
+
+.location-picker-remove:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ----------------------------------------------------------------
+   Entry Location Display — Saved Entry View
+   ---------------------------------------------------------------- */
+
+/* Full location indicator (EntryDetail view) */
+.location-indicator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.625rem 0.75rem;
+  padding: 0.875rem 1rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.location-indicator-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--journal-muted);
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.location-indicator-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.location-indicator-label {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--journal-ink);
+  font-weight: 500;
+}
+
+.location-indicator-context {
+  font-family: var(--font-serif);
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--journal-subtle);
+}
+
+.location-indicator-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.location-indicator-action {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--journal-muted);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-base) var(--ease-reflectra),
+    color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-indicator-action:hover {
+  border-color: var(--color-border-strong);
+  color: var(--journal-ink);
+}
+
+.location-indicator-action:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.location-indicator-action-external {
+  background: none;
+  border: 0;
+  color: var(--journal-subtle);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  transition: color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-indicator-action-external:hover {
+  color: var(--journal-ink);
+}
+
+.location-indicator-action-external:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Compact location indicator (list row) */
+.location-indicator-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--journal-subtle);
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+}
+
+/* Location indicator in journal entry row */
+.journal-entry-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--journal-subtle);
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+}
+
+/* ----------------------------------------------------------------
+   Mini Map — Leaflet Override Styles
+   ---------------------------------------------------------------- */
+.location-minimap-wrapper {
+  position: relative;
+  margin-top: 0.75rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  animation: location-picker-in var(--duration-slow) var(--ease-reflectra);
+}
+
+.location-minimap {
+  height: 200px;
+  width: 100%;
+  z-index: 0;
+}
+
+.location-minimap-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1000;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem;
+  color: var(--journal-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  box-shadow: var(--shadow-card);
+  transition: color var(--duration-base) var(--ease-reflectra);
+}
+
+.location-minimap-close:hover {
+  color: var(--journal-ink);
+}
+
+.location-minimap-close:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.location-minimap-loading {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-muted);
+  border-radius: var(--radius-md);
+  color: var(--journal-subtle);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+/* Override Leaflet's default styles to match Reflectra design */
+.location-minimap .leaflet-control-zoom a {
+  background-color: var(--color-surface) !important;
+  color: var(--journal-ink) !important;
+  border-color: var(--color-border) !important;
+}
+
+.location-minimap .leaflet-control-attribution {
+  background: rgba(255, 253, 249, 0.85) !important;
+  font-size: 0.625rem !important;
+  font-family: var(--font-sans) !important;
+  color: var(--journal-subtle) !important;
+}
+
+.location-minimap .leaflet-control-attribution a {
+  color: var(--journal-muted) !important;
+}
+
+/* ----------------------------------------------------------------
+   Phase 9 Responsive Adjustments
+   ---------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .location-picker-selected {
+    max-width: 100%;
+  }
+
+  .location-picker-label {
+    max-width: 200px;
+  }
+
+  .location-indicator {
+    flex-direction: column;
+    padding: 0.75rem;
+  }
+
+  .location-indicator-actions {
+    align-self: flex-end;
+  }
+}
+
+/* Phase 9 Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .location-picker-expanded {
+    animation: none;
+  }
+
+  .location-minimap-wrapper {
+    animation: none;
+  }
+
+  .location-picker-spinner,
+  .location-picker-spinner-small {
+    animation-duration: 2s;
+  }
+}
