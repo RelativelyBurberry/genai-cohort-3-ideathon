@@ -1,0 +1,39 @@
+Implementation Summary: Capability-Based Persistence Architecture for Backend-Owned Writes
+==================================================================
+
+✅ Phases Completed:
+  - Phase A: Inspect and map current call graph for persistence routing
+  - Phase B: Introduce privileged persistence capability abstraction (privilegedPersistence.ts)
+  - Phase C: Correct backend-owned write routing to Admin SDK only (conversationService.ts, patternShiftPersistence.ts)
+  - Phase D: Implement explicit preview/runtime degradation with BACKEND_PERSISTENCE_UNAVAILABLE (routes updated, error handling)
+  - Phase E: Update production deployment documentation (README.md: authority matrix, IAM requirements, deployment command, AI Studio preview limitations)
+  - Phase F: QA subagent independent validation of tests, security invariants, and documentation
+  - Phase G: QA subagent documentation updates
+
+✅ Verification Results:
+  - Test suite: 105 passed, 11 skipped (matches baseline)
+  - TypeScript clean: npx tsc --noEmit
+  - Production build clean: npm run build
+  - Firestore security invariants preserved (no weakening of firestore.rules)
+  - Backend-owned writes use Firebase Admin SDK only (no user-token REST fallback)
+  - Explicit failure handling: BACKEND_PERSISTENCE_UNAVAILABLE error mapped to HTTP 503
+
+📁 Key Files Modified:
+  - server/services/privilegedPersistence.ts
+  - server/services/conversationService.ts
+  - server/services/patternShiftPersistence.ts
+  - server/routes/reflection.ts
+  - server/routes/patternShift.ts
+  - README.md
+  - tests/reflectionRoutes.test.ts
+  - tests/patternShiftRoutes.test.ts
+  - PROJECT_STATE.md (updated Milestone 8 section)
+
+🚧 Blocked Item:
+  - AI Studio preview runtime verification (REQUIRES-AI-STUDIO)
+    Reason: No access to AI Studio preview environment in local development.
+    Mitigation: Failure handling logic validated via unit tests (QA verified).
+
+📎 Next Steps:
+  - Upon access to AI Studio preview, verify BACKEND_PERSISTENCE_UNAVAILABLE behavior for backend-owned writes.
+  - Milestone 5: Production Hardening & Observability (error tracking, health checks, enhanced logging).

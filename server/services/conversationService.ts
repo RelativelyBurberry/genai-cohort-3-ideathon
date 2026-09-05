@@ -4,22 +4,35 @@ import type { ReflectionTurn } from './geminiService.js';
 import {
   getConversationRest,
   getAuthoritativeMessagesRest,
-  persistAssistantMessageRest,
-  completeAndSummarizeConversationRest,
   deleteConversationRest,
   sortMessagesChronologically,
   getTimestampMillis,
 } from './firestoreRestService.js';
+import {
+  withBackendPersistenceCapability,
+  BackendPersistenceUnavailableError,
+} from './privilegedPersistence.js';
 
 /**
  * Server-side conversation persistence service.
  *
  * CRITICAL SECURITY INVARIANTS:
- * 1. Operates strictly via Firebase Admin SDK, scoped under `/users/{verifiedUid}/conversations/{conversationId}`.
- * 2. Client never provides authoritative history; server reads directly from Firestore.
- * 3. Assistant messages can ONLY be created by the backend.
- * 4. Summaries and status transitions to 'completed' are strictly backend-managed.
- * 5. Context budget strategy: Max 20 recent messages in chronological order, bounding token cost & prompt size.
+ * 1. Backend-owned writes (assistant messages, lifecycle transitions)
+ *    execute strictly via Firebase Admin SDK privileged authority.
+ *    They are NEVER authorized via a user Firebase ID token, because
+ *    Firestore security rules intentionally deny client-derived writes
+ *    to these surfaces.
+ * 2. User-authorized reads and deletes (owner-scoped) may use the
+ *    user's ID token over the REST API for AI Studio preview
+ *    compatibility, falling back to the Admin SDK when the runtime
+ *    identity is privileged.
+ * 3. Client never provides authoritative history; server reads
+ *    directly from Firestore.
+ * 4. Assistant messages can ONLY be created by the backend.
+ * 5. Summaries and status transitions to 'completed' are strictly
+ *    backend-managed.
+ * 6. Context budget strategy: Max 20 recent messages in chronological
+ *    order, bounding token cost & prompt size.
  */
 
 export interface AuthoritativeMessage {
@@ -43,6 +56,9 @@ const MAX_CONTEXT_MESSAGES = 20;
 
 /**
  * Loads conversation metadata for the verified user.
+ *
+ * This is a USER-AUTHORIZED READ. It may use the user's ID token
+ * over REST for AI Studio compatibility.
  */
 export async function getConversation(
   uid: string,
@@ -84,8 +100,12 @@ export async function getConversation(
 }
 
 /**
- * Retrieves the authoritative chronological message history from Firestore for a conversation.
- * Applies a context budget of the most recent MAX_CONTEXT_MESSAGES.
+ * Retrieves the authoritative chronological message history from
+ * Firestore for a conversation. Applies a context budget of the most
+ * recent MAX_CONTEXT_MESSAGES.
+ *
+ * This is a USER-AUTHORIZED READ. It may use the user's ID token
+ * over REST for AI Studio compatibility.
  */
 export async function getAuthoritativeMessages(
   uid: string,
@@ -96,8 +116,9 @@ export async function getAuthoritativeMessages(
   let rawMessages: AuthoritativeMessage[] = [];
 
   if (token) {
-    // Note: getAuthoritativeMessagesRest returns messages sorted and budget-capped,
-    // but we retrieve up to maxCount and re-verify chronological sorting here.
+    // Note: getAuthoritativeMessagesRest returns messages sorted and
+    // budget-capped, but we retrieve up to maxCount and re-verify
+    // chronological sorting here.
     const restMsgs = await getAuthoritativeMessagesRest(token, uid, conversationId, maxCount);
     rawMessages = restMsgs.map((m) => {
       let ts: Timestamp | null = null;
@@ -158,7 +179,13 @@ export function formatTurnsForGemini(messages: AuthoritativeMessage[]): Reflecti
 }
 
 /**
- * Persists an assistant-role response message and updates conversation timestamp.
+ * Persists an assistant-role response message and updates the
+ * conversation timestamp.
+ *
+ * BACKEND-OWNED WRITE. Privileged Admin SDK authority only.
+ * The token parameter is ignored for security - NEVER falls back to
+ * user-token REST. If the runtime lacks Firestore IAM, throws
+ * BackendPersistenceUnavailableError.
  */
 export async function persistAssistantMessage(
   uid: string,
@@ -166,46 +193,47 @@ export async function persistAssistantMessage(
   content: string,
   token?: string
 ): Promise<AuthoritativeMessage> {
-  if (token) {
-    const restMsg = await persistAssistantMessageRest(token, uid, conversationId, content);
+  // SECURITY: Ignore token parameter. Backend-owned writes MUST use
+  // privileged Admin SDK authority only. The token is only for
+  // user-authorized operations (reads/deletes) to maintain AI Studio
+  // compatibility.
+  return withBackendPersistenceCapability('persistAssistantMessage', async () => {
+    const db = getAdminDb();
+    const convRef = db.collection('users').doc(uid).collection('conversations').doc(conversationId);
+    const messagesCol = convRef.collection('messages');
+
+    const newDocRef = messagesCol.doc();
+    const now = FieldValue.serverTimestamp();
+
+    const batch = db.batch();
+    batch.set(newDocRef, {
+      role: 'assistant',
+      content,
+      createdAt: now,
+    });
+    batch.update(convRef, {
+      updatedAt: now,
+    });
+
+    await batch.commit();
+
     return {
-      id: restMsg.id,
-      role: restMsg.role,
-      content: restMsg.content,
-      createdAt: restMsg.createdAt ? Timestamp.fromDate(new Date(restMsg.createdAt)) : null,
+      id: newDocRef.id,
+      role: 'assistant',
+      content,
+      createdAt: null,
     };
-  }
-
-  const db = getAdminDb();
-  const convRef = db.collection('users').doc(uid).collection('conversations').doc(conversationId);
-  const messagesCol = convRef.collection('messages');
-
-  const newDocRef = messagesCol.doc();
-  const now = FieldValue.serverTimestamp();
-
-  const batch = db.batch();
-  batch.set(newDocRef, {
-    role: 'assistant',
-    content,
-    createdAt: now,
   });
-  batch.update(convRef, {
-    updatedAt: now,
-  });
-
-  await batch.commit();
-
-  return {
-    id: newDocRef.id,
-    role: 'assistant',
-    content,
-    createdAt: null,
-  };
 }
 
 /**
- * Atomically writes the generated summary, transitions conversation status to 'completed',
- * and updates summaryUpdatedAt timestamp.
+ * Atomically writes the generated summary, transitions conversation
+ * status to 'completed', and updates summaryUpdatedAt.
+ *
+ * BACKEND-OWNED WRITE. Privileged Admin SDK authority only.
+ * The token parameter is ignored for security - NEVER falls back to
+ * user-token REST. If the runtime lacks Firestore IAM, throws
+ * BackendPersistenceUnavailableError.
  */
 export async function completeAndSummarizeConversation(
   uid: string,
@@ -213,26 +241,31 @@ export async function completeAndSummarizeConversation(
   summary: string,
   token?: string
 ): Promise<void> {
-  if (token) {
-    await completeAndSummarizeConversationRest(token, uid, conversationId, summary);
-    return;
-  }
+  // SECURITY: Ignore token parameter. Backend-owned writes MUST use
+  // privileged Admin SDK authority only. The token is only for
+  // user-authorized operations (reads/deletes) to maintain AI Studio
+  // compatibility.
+  await withBackendPersistenceCapability('completeAndSummarizeConversation', async () => {
+    const db = getAdminDb();
+    const convRef = db.collection('users').doc(uid).collection('conversations').doc(conversationId);
 
-  const db = getAdminDb();
-  const convRef = db.collection('users').doc(uid).collection('conversations').doc(conversationId);
-
-  await convRef.update({
-    summary,
-    status: 'completed',
-    summaryUpdatedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+    await convRef.update({
+      summary,
+      status: 'completed',
+      summaryUpdatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
 }
 
 /**
- * Server-authoritative cascade deletion of a conversation and all its nested messages.
- * In AI Studio preview mode (when token is provided), delegates to deleteConversationRest.
- * Otherwise, deletes subcollection documents in chunked batches via Admin SDK, then deletes the parent conversation document.
+ * Server-authoritative cascade deletion of a conversation and all its
+ * nested messages.
+ *
+ * This is a USER-AUTHORIZED DELETE (rules allow owner delete of
+ * conversation + subcollection messages). It may use the user's ID
+ * token over REST for AI Studio compatibility, falling back to the
+ * Admin SDK when the runtime identity is privileged.
  */
 export async function deleteConversationServer(
   uid: string,
@@ -276,3 +309,6 @@ export async function deleteConversationServer(
   await convRef.delete();
 }
 
+// Re-export for callers that need to detect the capability error
+// without importing the privilegedPersistence module directly.
+export { BackendPersistenceUnavailableError };

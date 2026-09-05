@@ -66,7 +66,7 @@
 5. **Conversation Field Diffing**: Clients cannot modify backend-owned fields (`summary`, `status`, `summaryUpdatedAt`). Field updates restricted via Firestore diff checks.
 6. **Distributed Rate Limiting**: Fixed-window per-UID limiter (10 req/60s) stored in `/users/{uid}/limits/ai_ratelimit` via atomic transactions. No client read/write access.
 7. **Privacy-Safe Observability**: Structured logging middleware redacting all request bodies, prompt text, user entries, tokens, and authorization headers. Logs only request ID, timestamp, latency, status code, and pseudonymized client hash.
-8. **Runtime AI Model**: Configurable `GEMINI_MODEL="gemini-3.6-flash"` for backend reflection and PatternShift processing (to be integrated in Milestone 3).
+8. **Runtime AI Model**: Default `gemini-3.1-flash-lite` (configurable via `GEMINI_MODEL` env var) for backend reflection and PatternShift processing.
 
 ---
 
@@ -165,11 +165,44 @@ The following constraints are hard security rules. Future agents MUST preserve t
 
 ---
 
-## 8. Exact Next Milestone
-- **Milestone 4: PatternShift Insight Engine & Longitudinal Analytics**
-  - Read-only analysis of authenticated user's own historical journal entries and reflection summaries.
-  - Deterministic statistical metric pre-computation (topic frequency, mood shifts, confidence language).
-  - Gemini grounded pattern interpretation strictly scoped to computed metrics without medical or clinical claims.
-  - Persistence of generated insights to `/users/{uid}/insights/{insightId}` via Admin SDK (read-only for client).
-  - Visual longitudinal trend dashboards and privacy controls.
+## 8. Milestone 4: Capability-Based Privileged Persistence Architecture — **COMPLETED**
+
+Implemented in Milestone 4-5 Transition
+
+Backend-owned writes (assistant messages, conversation lifecycle transitions, PatternShift insights) execute exclusively via Firebase Admin SDK privileged authority. These operations are NEVER authorized via user Firebase ID tokens because Firestore security rules intentionally deny client-derived writes to these surfaces.
+
+**Architecture Components**:
+- `server/services/privilegedPersistence.ts`: Single source of truth for privilege boundary
+  - `BACKEND_PERSISTENCE_UNAVAILABLE` stable error code
+  - `BackendPersistenceUnavailableError` typed error (no IAM leakage)
+  - `isAdminPermissionDeniedError` classifier (detects code 7, PERMISSION_DENIED)
+  - `withBackendPersistenceCapability` wrapper for Admin SDK writes
+  - `toBackendPersistenceApiResponse` mapper returning HTTP 503 responses
+
+**Authority Matrix**:
+| Operation | Authority | Transport |
+|-----------|-----------|-----------|
+| Read conversations/messages/entries/insights | USER-AUTHORIZED | User token REST (Admin SDK fallback) |
+| Delete conversation + messages | USER-AUTHORIZED | User token REST (Admin SDK fallback) |
+| `persistAssistantMessage` | BACKEND-OWNED | Admin SDK only (token param ignored) |
+| `completeAndSummarizeConversation` | BACKEND-OWNED | Admin SDK only (token param ignored) |
+| `persistPatternShiftInsight` | BACKEND-OWNED | Admin SDK only (token param ignored) |
+
+**Production IAM Requirement**:
+Cloud Run runtime service account MUST have `roles/datastore.user` or `roles/firestore.user` on target project `industrious-edge-9xhgq`. Deploy with:
+```bash
+gcloud run deploy reflectra --service-account="reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com"
+```
+
+**AI Studio Preview Limitation**:
+Backend-owned writes are unavailable in AI Studio preview by design. The ambient ADC lacks Firestore IAM on the target project. User-authorized reads/deletes continue to work via user-token REST path.
+
+**QA Validation**:
+Independent QA verification confirmed test suite passes (105 passed, 11 skipped), backend-owned writes use Admin SDK only, explicit failure handling for BACKEND_PERSISTENCE_UNAVAILABLE, Firestore security invariants preserved, and documentation updated correctly.
+
+## 9. Exact Next Milestone
+- **Milestone 5: Production Hardening & Observability**
+  - Comprehensive error tracking and alerting for `BackendPersistenceUnavailableError`
+  - Production IAM validation health check endpoint
+  - Enhanced logging for capability failures without leaking sensitive data
 

@@ -9,15 +9,25 @@ import {
   fetchUserConversationsForPatternShift,
   persistPatternShiftInsight,
   fetchLatestPatternShiftInsight,
+  BackendPersistenceUnavailableError,
 } from '../services/patternShiftPersistence.js';
+import { toBackendPersistenceApiResponse } from '../services/privilegedPersistence.js';
 
 export const patternShiftRouter = Router();
 
 /**
  * POST /api/patternshift/analyze
  *
- * Runs deterministic pattern extraction and conditional Gemini interpretation across
- * the authenticated user's historical journal entries and completed reflections.
+ * Runs deterministic pattern extraction and conditional Gemini interpretation
+ * across the authenticated user's historical journal entries and completed
+ * reflections.
+ *
+ * Authority matrix:
+ * - USER-AUTHORIZED READS (entries, conversations): may use the user's
+ *   ID token over REST for AI Studio compatibility.
+ * - BACKEND-OWNED WRITE (insight persistence): privileged Admin SDK only.
+ *   NEVER uses the user token. If the runtime lacks Firestore IAM, the
+ *   write fails closed with BACKEND_PERSISTENCE_UNAVAILABLE.
  */
 patternShiftRouter.post(
   '/api/patternshift/analyze',
@@ -25,8 +35,8 @@ patternShiftRouter.post(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const uid = req.user?.uid;
     const token = req.token;
-    const isTesting = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
-    const passToken = isTesting ? undefined : token;
+    // USER-AUTHORIZED READS only; never a write authority.
+    const readToken = token;
 
     if (!uid) {
       res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
@@ -49,10 +59,10 @@ patternShiftRouter.post(
         return;
       }
 
-      // 2. Fetch User's Historical Data (Strictly isolated by verified UID)
+      // 2. Fetch User's Historical Data (USER-AUTHORIZED READS)
       const [entries, conversations] = await Promise.all([
-        fetchUserEntriesForPatternShift(uid, passToken),
-        fetchUserConversationsForPatternShift(uid, passToken),
+        fetchUserEntriesForPatternShift(uid, readToken),
+        fetchUserConversationsForPatternShift(uid, readToken),
       ]);
 
       // 3. Deterministic Preprocessing Engine
@@ -74,6 +84,7 @@ patternShiftRouter.post(
       const aiInsights = await generatePatternShiftInsights(engineResult.metrics);
 
       // 6. Construct and Persist Insight Document
+      //    (BACKEND-OWNED WRITE — privileged Admin SDK only, no user token)
       const insightId = crypto.randomUUID();
       const newInsight = {
         id: insightId,
@@ -90,13 +101,25 @@ patternShiftRouter.post(
         type: 'patternshift' as const,
       };
 
-      await persistPatternShiftInsight(uid, newInsight, passToken);
+      await persistPatternShiftInsight(uid, newInsight);
 
       res.status(200).json({
         status: 'success',
         insight: newInsight,
       });
     } catch (err: any) {
+      // Capability error: privileged persistence unavailable in this
+      // runtime. Fail closed; do NOT return a successful insight
+      // payload that was never persisted.
+      if (err instanceof BackendPersistenceUnavailableError) {
+        const apiResp = toBackendPersistenceApiResponse(err, 'persistPatternShiftInsight');
+        console.error('[PATTERNSHIFT_ANALYZE_ERROR] capability unavailable:', err.operation);
+        res.status(apiResp.status).json({
+          error: apiResp.body.error,
+          message: apiResp.body.message,
+        });
+        return;
+      }
       console.error('[PATTERNSHIFT_ANALYZE_ERROR]', err);
       res.status(500).json({
         error: 'internal_error',
@@ -110,6 +133,7 @@ patternShiftRouter.post(
  * GET /api/patternshift/latest
  *
  * Retrieves the latest persisted PatternShift insight for the authenticated user.
+ * USER-AUTHORIZED READ.
  */
 patternShiftRouter.get(
   '/api/patternshift/latest',
@@ -117,8 +141,8 @@ patternShiftRouter.get(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const uid = req.user?.uid;
     const token = req.token;
-    const isTesting = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
-    const passToken = isTesting ? undefined : token;
+    // USER-AUTHORIZED READ only; never a write authority.
+    const readToken = token;
 
     if (!uid) {
       res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
@@ -126,7 +150,7 @@ patternShiftRouter.get(
     }
 
     try {
-      const latestInsight = await fetchLatestPatternShiftInsight(uid, passToken);
+      const latestInsight = await fetchLatestPatternShiftInsight(uid, readToken);
 
       res.status(200).json({
         status: 'success',

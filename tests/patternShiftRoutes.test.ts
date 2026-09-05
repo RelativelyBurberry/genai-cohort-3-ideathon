@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import type { Server } from 'http';
-import { patternShiftRouter } from '../server/routes/patternShift';
-import * as adminHelper from '../server/firebaseAdmin';
-import * as rateLimiter from '../server/services/rateLimiter';
-import * as geminiService from '../server/services/geminiService';
-import * as persistenceService from '../server/services/patternShiftPersistence';
+import { patternShiftRouter } from '../server/routes/patternShift.js';
+import * as adminHelper from '../server/firebaseAdmin.js';
+import * as rateLimiter from '../server/services/rateLimiter.js';
+import * as geminiService from '../server/services/geminiService.js';
+import * as persistenceService from '../server/services/patternShiftPersistence.js';
 
 describe('Milestone 5 PatternShift Routes', () => {
   let app: express.Express;
@@ -96,6 +96,8 @@ describe('Milestone 5 PatternShift Routes', () => {
       const data = await res.json();
       expect(res.status).toBe(429);
       expect(data.error).toBe('rate_limit_exceeded');
+      expect(data.message).toBe(`Too many pattern analysis requests. Please retry in ${45} seconds.`);
+      expect(data.retryAfterSeconds).toBe(45);
     });
 
     it('returns insufficient_data and NEVER calls Gemini when < 3 items exist', async () => {
@@ -210,7 +212,9 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(data.insight.itemCount.total).toBe(3);
 
       expect(geminiSpy).toHaveBeenCalledTimes(1);
-      expect(persistSpy).toHaveBeenCalledWith('user_123', expect.anything(), undefined);
+      // SECURITY: persistPatternShiftInsight is called WITHOUT a user token
+      // because backend-owned writes use privileged Admin SDK only.
+      expect(persistSpy).toHaveBeenCalledWith('user_123', expect.anything());
     });
 
     it('strictly isolates data lookup by verified token UID and ignores body tampering', async () => {
@@ -242,8 +246,8 @@ describe('Milestone 5 PatternShift Routes', () => {
       });
 
       // Verification: Lookups are strictly for user_123
-      expect(fetchEntriesSpy).toHaveBeenCalledWith('user_123', undefined);
-      expect(fetchConvsSpy).toHaveBeenCalledWith('user_123', undefined);
+      expect(fetchEntriesSpy).toHaveBeenCalledWith('user_123', 'valid_token');
+      expect(fetchConvsSpy).toHaveBeenCalledWith('user_123', 'valid_token');
     });
   });
 
@@ -285,6 +289,7 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(res.status).toBe(200);
       expect(data.status).toBe('success');
       expect(data.insight.id).toBe('ins_1');
+      expect(persistenceService.fetchLatestPatternShiftInsight).toHaveBeenCalledWith('user_123', 'valid_token');
     });
 
     it('returns null insight gracefully when no previous insights exist', async () => {
@@ -301,6 +306,8 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(res.status).toBe(200);
       expect(data.status).toBe('success');
       expect(data.insight).toBeNull();
+      expect(persistenceService.fetchLatestPatternShiftInsight).toHaveBeenCalledWith('user_123', 'valid_token');
     });
   });
+
 });

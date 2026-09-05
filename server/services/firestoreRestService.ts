@@ -306,8 +306,14 @@ export async function getAuthoritativeMessagesRest(
 
 /**
  * Persists an assistant-role response message via the REST API.
- * Note: Under firestore.rules, user-level authorization forbids assistant role creation.
- * We implement this for compatibility/completeness, catching permissions failures appropriately.
+ *
+ * LEGACY / UNUSED BY THE PRIVILEGED WRITE PATH:
+ * Under firestore.rules, user-level authorization forbids assistant role
+ * creation. Backend-owned writes MUST use the Admin SDK privileged path
+ * (server/services/privilegedPersistence.ts). This function is retained
+ * only for reference and MUST NOT be called by the persistence services.
+ * It is guaranteed to fail with PERMISSION_DENIED when invoked with a
+ * user token.
  */
 export async function persistAssistantMessageRest(
   token: string,
@@ -376,8 +382,14 @@ export async function persistAssistantMessageRest(
 
 /**
  * Completes and summarizes a conversation via the REST API.
- * Note: Under firestore.rules, user-level authorization forbids modifying the status/summary fields.
- * We implement this for compatibility/completeness, catching permissions failures appropriately.
+ *
+ * LEGACY / UNUSED BY THE PRIVILEGED WRITE PATH:
+ * Under firestore.rules, user-level authorization forbids modifying the
+ * status/summary fields. Backend-owned writes MUST use the Admin SDK
+ * privileged path (server/services/privilegedPersistence.ts). This
+ * function is retained only for reference and MUST NOT be called by the
+ * persistence services. It is guaranteed to fail with PERMISSION_DENIED
+ * when invoked with a user token.
  */
 export async function completeAndSummarizeConversationRest(
   token: string,
@@ -595,6 +607,14 @@ export async function getUserConversationsRest(token: string, uid: string): Prom
 
 /**
  * Persists a generated PatternShift insight using REST API.
+ *
+ * LEGACY / UNUSED BY THE PRIVILEGED WRITE PATH:
+ * Under firestore.rules, /users/{uid}/insights is read-only for clients
+ * (`allow write: if false`). Backend-owned writes MUST use the Admin SDK
+ * privileged path (server/services/privilegedPersistence.ts). This
+ * function is retained only for reference and MUST NOT be called by the
+ * persistence services. It is guaranteed to fail with PERMISSION_DENIED
+ * when invoked with a user token.
  */
 export async function persistInsightRest(token: string, uid: string, insight: any): Promise<void> {
   const baseUrl = getBaseUrl();

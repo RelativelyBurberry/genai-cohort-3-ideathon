@@ -70,6 +70,27 @@ Reflectra follows a strict decoupled full-stack architecture:
 - Message immutability and provenance: Clients may only write messages with `role == "user"`. Assistant responses are persisted exclusively by the backend service.
 - Field protection: Sensitive metadata fields (`summary`, `summaryUpdatedAt`, `status`) cannot be modified by clients.
 
+### Backend-Owned Persistence Authority Matrix
+
+Reflectra separates **user-authorized operations** (allowed by Firestore rules for the token holder) from **backend-owned writes** (denied by Firestore rules when authenticated as a user; require privileged server identity):
+
+| Operation | Authority | Transport | Notes |
+|---|---|---|---|
+| Read `/users/{uid}/conversations/{cid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)` |
+| Read `/users/{uid}/conversations/{cid}/messages/{mid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)` |
+| Read `/users/{uid}/entries/{eid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)` |
+| Read `/users/{uid}/insights/{iid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)`, `allow write: if false` |
+| Delete conversation + subcollection | USER-AUTHORIZED DELETE | User ID token over REST (Admin SDK fallback) | Rules: `allow delete: if isOwner(userId)` |
+| Create `/users/{uid}/entries/{eid}` | CLIENT WRITE | Client SDK | Owner + schema validation |
+| Create `/users/{uid}/conversations/{cid}` (status=active, no summary) | CLIENT WRITE | Client SDK | Owner + initial-state guard |
+| Create `/users/{uid}/conversations/{cid}/messages/{mid}` (role=user) | CLIENT WRITE | Client SDK | Owner + provenance check |
+| **`persistAssistantMessage`** (role=assistant) | **BACKEND-OWNED WRITE** | **Admin SDK only** | **NEVER user-token REST** |
+| **`completeAndSummarizeConversation`** (status, summary, summaryUpdatedAt) | **BACKEND-OWNED WRITE** | **Admin SDK only** | **NEVER user-token REST** |
+| **`persistPatternShiftInsight`** (`/insights/{iid}`) | **BACKEND-OWNED WRITE** | **Admin SDK only** | **NEVER user-token REST** |
+| `/users/{uid}/limits/{docId}` | BACKEND-OWNED | Admin SDK only | Rules: `allow read, write: if false` |
+
+The three backend-owned writes in bold (assistant message persistence, conversation completion/summarization, PatternShift insight persistence) are the privilege boundary. If the runtime identity lacks Firestore IAM for the target database, these operations throw `BackendPersistenceUnavailableError` and the API returns HTTP 503 with `error: "BACKEND_PERSISTENCE_UNAVAILABLE"`. The handler MUST NOT fall back to user-token REST, MUST NOT weaken the rules, and MUST NOT silently swallow the failure. See `server/services/privilegedPersistence.ts` for the typed error and the classification of Admin SDK permission failures.
+
 ### Privacy-Safe Observability
 - Strict redaction in operational logs: Server logs never record journal contents, conversation text, prompts, model completions, raw tokens, or authorization headers.
 - Structured audit logs contain only: `requestId`, `timestamp`, `method`, `path`, `statusCode`, `latencyMs`, and a pseudonymized client identifier (`clientHash`: SHA-256 substring of UID).
@@ -143,27 +164,78 @@ Runs:
 
 ## 6. Cloud Run Deployment
 
+### Named Firestore Database
+
+This application targets a **named Firestore database** (not the default):
+
+- **Database ID**: `ai-studio-reflectra-07ab4b1d-1624-4acf-8074-a976e2a233c2`
+- **Project**: `industrious-edge-9xhgq`
+
+Both the client (`src/firebase.ts`) and the backend Admin SDK (`server/firebaseAdmin.ts`) are configured to target this database via `firebase-applet-config.json`. The Admin SDK uses `getFirestore(app, databaseId)` for privileged writes. This is **not** optional — all backend-owned writes must target the named database.
+
+### Production IAM Requirement
+
+**CRITICAL**: Backend-owned writes (assistant messages, conversation lifecycle transitions, PatternShift insights) execute via the Firebase Admin SDK. This requires the Cloud Run **runtime service account** to have Firestore IAM on the target project and database.
+
+The deployment MUST:
+1. Create or designate a service account in project `industrious-edge-9xhgq`.
+2. Grant `roles/datastore.user` (or `roles/firestore.user`) on the project.
+3. Attach that service account to the Cloud Run service via `--service-account`.
+
+If the Cloud Run service runs under a service account that lacks Firestore IAM, backend-owned writes will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503). The AI Studio preview sandbox cannot be granted IAM on the user's Firebase project; therefore, backend-owned persistence is **unavailable in preview by design**.
+
+### Deployment Command
+
 Build and deploy the containerized full-stack application:
 
 ```bash
 # 1. Build the production bundle
 npm run build
 
-# 2. Deploy to Google Cloud Run
+# 2. (One-time) Create dedicated service account if not exists
+gcloud iam service-accounts create reflectra-backend \
+  --display-name="Reflectra Backend Service Account" \
+  --project=industrious-edge-9xhgq
+
+# 3. Grant Firestore IAM to the service account
+gcloud projects add-iam-policy-binding industrious-edge-9xhgq \
+  --member="serviceAccount:reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com" \
+  --role="roles/datastore.user"
+
+# 4. (Optional) Grant Identity Toolkit access for token revocation checking
+gcloud projects add-iam-policy-binding industrious-edge-9xhgq \
+  --member="serviceAccount:reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com" \
+  --role="roles/identitytoolkit.viewer"
+
+# 5. Deploy to Cloud Run with explicit service account
 gcloud run deploy reflectra \
   --source . \
   --region asia-east1 \
   --allow-unauthenticated \
+  --service-account="reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com" \
   --set-env-vars="FIREBASE_CHECK_REVOKED=true,APP_URL=https://reflectra-ttdjc5plokhcurtykxiyb2-413982939225.asia-east1.run.app" \
   --set-secrets="GEMINI_API_KEY=gemini-api-key:latest"
 ```
 
+**Do not deploy without `--service-account`** unless the project's default Compute Engine service account already has the required Firestore IAM (not recommended for production).
+
 ---
 
-## 7. PatternShift Feature Architecture
+## 7. AI Studio Preview Limitations
 
-PatternShift is Reflectra's longitudinal reflection synthesis engine:
-1. **Historical Retrieval**: Analyzes only the authenticated user's own historical reflections (`/users/{uid}/entries`).
-2. **Structured Aggregation**: Computes objective trend metrics (topic recurrence, tone shift, cognitive confidence markers) before querying Gemini.
-3. **Safe Reasoning**: Interprets trends as descriptive observations rather than psychological or medical conclusions. Prohibits mental health diagnoses.
-4. **Data Isolation**: Never compares users across accounts or pools reflection datasets.
+The AI Studio preview runtime is constrained:
+
+- The ambient Application Default Credentials (ADC) belong to the hosting/sandbox project, **not** to `industrious-edge-9xhgq`. No IAM grant on the target project is available from the preview sandbox.
+- User-authorized reads and deletes (owner-scoped) continue to work in preview because Firestore rules allow them.
+- **Backend-owned writes are unavailable in preview by design**:
+  - `POST /api/reflect` — assistant message persistence will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503) if privileged IAM is absent. The API does NOT return a generated assistant response that was never persisted; the user is informed that reflection services are temporarily unavailable.
+  - `POST /api/conversations/:id/summarize` — conversation completion/summarization will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503) if privileged IAM is absent. The conversation remains in `active` state; no summary is written.
+  - `POST /api/patternshift/analyze` — insight persistence will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503) if privileged IAM is absent. No insight is reported as generated unless it was successfully persisted.
+- `GET /api/patternshift/latest` and all read endpoints continue to work via the user-token REST path.
+- `DELETE /api/conversations/:id` continues to work via the user-token REST path (rules allow owner delete).
+
+Production Cloud Run deployments with a correctly-attached service account do NOT exhibit this limitation.
+
+---
+
+## 8. PatternShift Feature Architecture

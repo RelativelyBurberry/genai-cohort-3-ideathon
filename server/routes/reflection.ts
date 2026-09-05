@@ -14,8 +14,10 @@ import {
   persistAssistantMessage,
   completeAndSummarizeConversation,
   deleteConversationServer,
+  BackendPersistenceUnavailableError,
 } from '../services/conversationService.js';
 import { getTimestampMillis } from '../services/firestoreRestService.js';
+import { toBackendPersistenceApiResponse } from '../services/privilegedPersistence.js';
 
 export const reflectionRouter = Router();
 
@@ -25,19 +27,22 @@ function isValidDocId(id: unknown): id is string {
 }
 
 /**
- * POST /api/reflect
- * Authenticated endpoint to trigger a Gemini reflection response for an active conversation.
+ * Determine the read transport label for diagnostics.
  *
- * Execution Order:
- * 1. requireAuth: Verifies Firebase ID token; extracts verified UID.
- * 2. Request payload validation.
- * 3. Authoritative conversation verification under /users/{verifiedUid}/conversations/{id}.
- * 4. Deterministic crisis screening BEFORE Gemini or rate-limiting.
- * 5. Distributed Firestore rate limiter check (10 req/60s).
- * 6. Authoritative message history retrieval.
- * 7. Gemini invocation with structured boundaries.
- * 8. Backend persistence of assistant message via Admin SDK.
+ * USER-AUTHORIZED reads in this router may use either the user's ID
+ * token over REST (AI Studio preview compatibility) or the Admin SDK
+ * (when the runtime has privileged IAM). Reads are NOT the same as
+ * backend-owned writes; this router only routes backend-owned writes
+ * through the privileged Admin SDK path.
  */
+function isReadUsingUserToken(token: string | undefined): boolean {
+  // The user token is only used for owner-scoped reads. We never use
+  // it as authority for backend-owned writes (assistant messages,
+  // lifecycle transitions). The presence of a token simply signals
+  // that this runtime chose the user-token REST read path.
+  return Boolean(token);
+}
+
 interface StageState {
   status: 'enter' | 'success' | 'failure';
   transport?: string;
@@ -52,7 +57,7 @@ function createDiagnostics(
   errorCode: string,
   errorMessage: string,
   stageTrace: Record<string, StageState>,
-  passToken: any
+  readTransport: 'firestore_rest_user_token' | 'admin_sdk'
 ) {
   const stageOrder = [
     'request_received',
@@ -83,7 +88,9 @@ function createDiagnostics(
     errorName,
     errorCode,
     errorMessage,
-    firestoreTransport: passToken ? 'firestore_rest_user_token' : 'admin_sdk',
+    // Read transport only. Backend-owned writes always use the
+    // privileged Admin SDK path; they never have a user-token variant.
+    readTransport,
     conversationLookupSucceeded: stageTrace['conversation_lookup']?.status === 'success',
     authoritativeMessagesLookupSucceeded: stageTrace['authoritative_messages_lookup']?.status === 'success',
     rateLimiterSucceeded: stageTrace['rate_limit_check']?.status === 'success',
@@ -94,13 +101,13 @@ function createDiagnostics(
     stageTrace: {
       request_received: stageTrace['request_received'] || { status: 'enter' },
       auth_verified: stageTrace['auth_verified'] || { status: 'enter' },
-      conversation_lookup: stageTrace['conversation_lookup'] || { status: 'enter', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' },
-      authoritative_messages_lookup: stageTrace['authoritative_messages_lookup'] || { status: 'enter', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' },
+      conversation_lookup: stageTrace['conversation_lookup'] || { status: 'enter', transport: readTransport },
+      authoritative_messages_lookup: stageTrace['authoritative_messages_lookup'] || { status: 'enter', transport: readTransport },
       crisis_screen: stageTrace['crisis_screen'] || { status: 'enter' },
       rate_limit_check: stageTrace['rate_limit_check'] || { status: 'enter' },
       gemini_client_initialization: stageTrace['gemini_client_initialization'] || { status: 'enter' },
       gemini_generate_content: stageTrace['gemini_generate_content'] || { status: 'enter' },
-      assistant_message_persistence: stageTrace['assistant_message_persistence'] || { status: 'enter', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' },
+      assistant_message_persistence: stageTrace['assistant_message_persistence'] || { status: 'enter', transport: 'admin_sdk' },
       request_complete: stageTrace['request_complete'] || { status: 'enter' }
     }
   };
@@ -114,14 +121,19 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
 
   const uid = req.user?.uid;
   const token = req.token;
-  const isTesting = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
-  const passToken = isTesting ? undefined : token;
+  // USER-AUTHORIZED READS: may use the user's ID token for owner-scoped
+  // reads of conversation and messages. This is a legitimate use of
+  // user-token REST transport.
+  const readToken = token;
+  const readTransport: 'firestore_rest_user_token' | 'admin_sdk' = isReadUsingUserToken(readToken)
+    ? 'firestore_rest_user_token'
+    : 'admin_sdk';
 
   if (!uid) {
     activeStage = 'auth_verified';
     stageTrace[activeStage] = { status: 'failure', errorCode: 'unauthorized', errorMessage: 'Authentication required' };
     console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: 401 | error: unauthorized`);
-    const diagnostics = createDiagnostics(activeStage, 401, 'Error', 'unauthorized', 'Authentication required', stageTrace, passToken);
+    const diagnostics = createDiagnostics(activeStage, 401, 'Error', 'unauthorized', 'Authentication required', stageTrace, readTransport);
     console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
     res.status(401).json({ error: 'unauthorized', message: 'Authentication required.', diagnostics });
     return;
@@ -137,7 +149,7 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
     activeStage = 'conversation_lookup';
     stageTrace[activeStage] = { status: 'failure', errorCode: 'invalid_request', errorMessage: 'A valid conversationId string is required' };
     console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: 400 | error: invalid_request`);
-    const diagnostics = createDiagnostics(activeStage, 400, 'Error', 'invalid_request', 'A valid conversationId string is required.', stageTrace, passToken);
+    const diagnostics = createDiagnostics(activeStage, 400, 'Error', 'invalid_request', 'A valid conversationId string is required.', stageTrace, readTransport);
     console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
     res.status(400).json({
       error: 'invalid_request',
@@ -148,17 +160,15 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
   }
 
   try {
-    // Stage: conversation_lookup
+    // Stage: conversation_lookup (USER-AUTHORIZED READ)
     activeStage = 'conversation_lookup';
-    stageTrace[activeStage] = { status: 'enter', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' };
-    console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: ${passToken ? 'firestore_rest_user_token' : 'admin_sdk'} | database: named | status: enter`);
-    const conversation = passToken
-      ? await getConversation(uid, conversationId, passToken)
-      : await getConversation(uid, conversationId);
+    stageTrace[activeStage] = { status: 'enter', transport: readTransport };
+    console.log(`[STAGE_TRACE] stage: ${activeStage} | readTransport: ${readTransport} | database: named | status: enter`);
+    const conversation = await getConversation(uid, conversationId, readToken);
     if (!conversation) {
-      stageTrace[activeStage] = { status: 'failure', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk', errorCode: 'conversation_not_found', errorMessage: 'Reflection conversation not found.' };
+      stageTrace[activeStage] = { status: 'failure', transport: readTransport, errorCode: 'conversation_not_found', errorMessage: 'Reflection conversation not found.' };
       console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: 404 | error: conversation_not_found`);
-      const diagnostics = createDiagnostics(activeStage, 404, 'Error', 'conversation_not_found', 'Reflection conversation not found.', stageTrace, passToken);
+      const diagnostics = createDiagnostics(activeStage, 404, 'Error', 'conversation_not_found', 'Reflection conversation not found.', stageTrace, readTransport);
       console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
       res.status(404).json({
         error: 'conversation_not_found',
@@ -169,9 +179,9 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
     }
 
     if (conversation.status === 'completed') {
-      stageTrace[activeStage] = { status: 'failure', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk', errorCode: 'conversation_completed', errorMessage: 'This reflection conversation is completed and cannot accept new turns.' };
+      stageTrace[activeStage] = { status: 'failure', transport: readTransport, errorCode: 'conversation_completed', errorMessage: 'This reflection conversation is completed and cannot accept new turns.' };
       console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: 409 | error: conversation_completed`);
-      const diagnostics = createDiagnostics(activeStage, 409, 'Error', 'conversation_completed', 'This reflection conversation is completed and cannot accept new turns.', stageTrace, passToken);
+      const diagnostics = createDiagnostics(activeStage, 409, 'Error', 'conversation_completed', 'This reflection conversation is completed and cannot accept new turns.', stageTrace, readTransport);
       console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
       res.status(409).json({
         error: 'conversation_completed',
@@ -180,22 +190,20 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
       });
       return;
     }
-    stageTrace[activeStage] = { status: 'success', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' };
-    console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: ${passToken ? 'firestore_rest_user_token' : 'admin_sdk'} | database: named | status: success`);
+    stageTrace[activeStage] = { status: 'success', transport: readTransport };
+    console.log(`[STAGE_TRACE] stage: ${activeStage} | readTransport: ${readTransport} | database: named | status: success`);
 
-    // Stage: authoritative_messages_lookup
+    // Stage: authoritative_messages_lookup (USER-AUTHORIZED READ)
     activeStage = 'authoritative_messages_lookup';
-    stageTrace[activeStage] = { status: 'enter', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' };
-    console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: ${passToken ? 'firestore_rest_user_token' : 'admin_sdk'} | database: named | status: enter`);
-    const messages = passToken
-      ? await getAuthoritativeMessages(uid, conversationId, undefined, passToken)
-      : await getAuthoritativeMessages(uid, conversationId);
+    stageTrace[activeStage] = { status: 'enter', transport: readTransport };
+    console.log(`[STAGE_TRACE] stage: ${activeStage} | readTransport: ${readTransport} | database: named | status: enter`);
+    const messages = await getAuthoritativeMessages(uid, conversationId, undefined, readToken);
 
     if (messages.length === 0) {
-      stageTrace[activeStage] = { status: 'failure', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk', errorCode: 'empty_conversation', errorMessage: 'No messages found in this conversation.' };
+      stageTrace[activeStage] = { status: 'failure', transport: readTransport, errorCode: 'empty_conversation', errorMessage: 'No messages found in this conversation.' };
       console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: 400 | error: empty_conversation`);
-      const diagnostics = createDiagnostics(activeStage, 400, 'Error', 'empty_conversation', 'No messages found in this conversation. Please record a reflection first.', stageTrace, passToken);
-      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
+      const diagnostics = createDiagnostics(activeStage, 400, 'Error', 'empty_conversation', 'No messages found in this conversation. Please record a reflection first.', stageTrace, readTransport);
+      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: {diagnostics.errorMessage}`);
       res.status(400).json({
         error: 'empty_conversation',
         message: 'No messages found in this conversation. Please record a reflection first.',
@@ -218,10 +226,10 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
 
     const latestMessage = messages[messages.length - 1];
     if (latestMessage.role !== 'user') {
-      stageTrace[activeStage] = { status: 'failure', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk', errorCode: 'invalid_turn', errorMessage: 'The latest message in this conversation was already answered.' };
+      stageTrace[activeStage] = { status: 'failure', transport: readTransport, errorCode: 'invalid_turn', errorMessage: 'The latest message in this conversation was already answered.' };
       console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: 400 | error: invalid_turn`);
-      const diagnostics = createDiagnostics(activeStage, 400, 'Error', 'invalid_turn', 'The latest message in this conversation was already answered.', stageTrace, passToken);
-      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
+      const diagnostics = createDiagnostics(activeStage, 400, 'Error', 'invalid_turn', 'The latest message in this conversation was already answered.', stageTrace, readTransport);
+      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: {diagnostics.failedStage}\nerrorName: {diagnostics.errorName}\nerrorCode: {diagnostics.errorCode}\nerrorMessage: {diagnostics.errorMessage}`);
       res.status(400).json({
         error: 'invalid_turn',
         message: 'The latest message in this conversation was already answered.',
@@ -229,7 +237,7 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
       });
       return;
     }
-    stageTrace[activeStage] = { status: 'success', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' };
+    stageTrace[activeStage] = { status: 'success', transport: readTransport };
     console.log(`[STAGE_TRACE] stage: ${activeStage} | status: success`);
 
     // Stage: crisis_screen
@@ -263,8 +271,8 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
       stageTrace[activeStage] = { status: 'failure', errorCode: 'rate_limit_exceeded', errorMessage: 'Reflection rate limit reached.' };
       console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: 429 | error: rate_limit_exceeded`);
       res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
-      const diagnostics = createDiagnostics(activeStage, 429, 'Error', 'rate_limit_exceeded', 'Reflection rate limit reached. Please pause and reflect before continuing.', stageTrace, passToken);
-      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
+      const diagnostics = createDiagnostics(activeStage, 429, 'Error', 'rate_limit_exceeded', 'Reflection rate limit reached. Please pause and reflect before continuing.', stageTrace, readTransport);
+      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: {diagnostics.lastSuccessfulStage}\nfailedStage: {diagnostics.failedStage}\nerrorName: {diagnostics.errorName}\nerrorCode: {diagnostics.errorCode}\nerrorMessage: {diagnostics.errorMessage}`);
       res.status(429).json({
         error: 'rate_limit_exceeded',
         message: 'Reflection rate limit reached. Please pause and reflect before continuing.',
@@ -296,15 +304,22 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
     stageTrace[activeStage] = { status: 'success' };
     console.log(`[STAGE_TRACE] stage: ${activeStage} | status: success`);
 
-    // Stage: assistant_message_persistence
+    // Stage: assistant_message_persistence (BACKEND-OWNED WRITE)
+    //
+    // CRITICAL: This stage is the privilege boundary. We call
+    // persistAssistantMessage with NO user token. The function is
+    // strictly privileged; if the runtime lacks Firestore IAM it
+    // throws BackendPersistenceUnavailableError and we MUST fail
+    // closed. The API MUST NOT return the generated text as a
+    // successful assistant turn, because the turn was never
+    // persisted. Returning a 200 with a "disappearing" message
+    // would create a transactional/UX lie.
     activeStage = 'assistant_message_persistence';
-    stageTrace[activeStage] = { status: 'enter', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' };
-    console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: ${passToken ? 'firestore_rest_user_token' : 'admin_sdk'} | database: named | status: enter`);
-    const assistantMessage = passToken
-      ? await persistAssistantMessage(uid, conversationId, assistantText, passToken)
-      : await persistAssistantMessage(uid, conversationId, assistantText);
-    stageTrace[activeStage] = { status: 'success', transport: passToken ? 'firestore_rest_user_token' : 'admin_sdk' };
-    console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: ${passToken ? 'firestore_rest_user_token' : 'admin_sdk'} | database: named | status: success`);
+    stageTrace[activeStage] = { status: 'enter', transport: 'admin_sdk' };
+    console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: admin_sdk | database: named | status: enter`);
+    const assistantMessage = await persistAssistantMessage(uid, conversationId, assistantText, undefined);
+    stageTrace[activeStage] = { status: 'success', transport: 'admin_sdk' };
+    console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: admin_sdk | database: named | status: success`);
 
     // Stage: request_complete
     activeStage = 'request_complete';
@@ -320,6 +335,32 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
     });
     console.log(`[STAGE_TRACE] stage: ${activeStage} | status: success | http: 200`);
   } catch (error: any) {
+    // Capability error: privileged persistence unavailable in this
+    // runtime. Fail closed; do NOT return a 200 with a generated
+    // assistant response that was never persisted.
+    if (error instanceof BackendPersistenceUnavailableError) {
+      const apiResp = toBackendPersistenceApiResponse(error, 'persistAssistantMessage');
+      const sanitizedMsg = apiResp.body.message;
+      const errorCode = apiResp.body.error;
+      if (activeStage) {
+        stageTrace[activeStage] = {
+          status: 'failure',
+          errorCode: String(errorCode),
+          errorMessage: sanitizedMsg,
+          transport: 'admin_sdk',
+        };
+      }
+      const diagnostics = createDiagnostics(activeStage, apiResp.status, 'BackendPersistenceUnavailableError', String(errorCode), sanitizedMsg, stageTrace, readTransport);
+      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: {diagnostics.lastSuccessfulStage}\nfailedStage: {diagnostics.failedStage}\nerrorName: {diagnostics.errorName}\nerrorCode: {diagnostics.errorCode}\nerrorMessage: {diagnostics.errorMessage}`);
+      console.error(`[STAGE_TRACE] stage: {activeStage} | status: failure | http: {apiResp.status} | errorCode: {errorCode} | errorMsg: {sanitizedMsg}`);
+      res.status(apiResp.status).json({
+        error: apiResp.body.error,
+        message: apiResp.body.message,
+        diagnostics,
+      });
+      return;
+    }
+
     const sanitizedMsg = error?.message ? String(error.message).replace(/[A-Za-z0-9_-]{25,}/g, '[REDACTED]') : 'Unknown';
     const errorCode = error?.code || error?.status || (error as any)?.statusCode || 'UNKNOWN';
     const errorName = error?.name || 'Error';
@@ -330,9 +371,9 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
         status: 'failure',
         errorCode: String(errorCode),
         errorMessage: sanitizedMsg,
-        transport: (activeStage === 'conversation_lookup' || activeStage === 'authoritative_messages_lookup' || activeStage === 'assistant_message_persistence')
-          ? (passToken ? 'firestore_rest_user_token' : 'admin_sdk')
-          : undefined
+        transport: (activeStage === 'conversation_lookup' || activeStage === 'authoritative_messages_lookup')
+          ? readTransport
+          : (activeStage === 'assistant_message_persistence' ? 'admin_sdk' : undefined)
       };
     }
 
@@ -340,10 +381,10 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
     const isGeminiConfigError = error?.message?.includes('GEMINI_CONFIGURATION_ERROR');
     const httpStatus = isGeminiConfigError ? 503 : 500;
 
-    const diagnostics = createDiagnostics(activeStage, httpStatus, errorName, String(errorCode), sanitizedMsg, stageTrace, passToken);
+    const diagnostics = createDiagnostics(activeStage, httpStatus, errorName, String(errorCode), sanitizedMsg, stageTrace, readTransport);
 
-    console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
-    console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: ${httpStatus} | errorCode: ${errorCode} | errorMsg: ${sanitizedMsg}`);
+    console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: {diagnostics.lastSuccessfulStage}\nfailedStage: {diagnostics.failedStage}\nerrorName: {diagnostics.errorName}\nerrorCode: {diagnostics.errorCode}\nerrorMessage: {diagnostics.errorMessage}`);
+    console.error(`[STAGE_TRACE] stage: {activeStage} | status: failure | http: {httpStatus} | errorCode: {errorCode} | errorMsg: {sanitizedMsg}`);
 
     res.status(httpStatus).json({
       error: isGeminiConfigError ? 'service_unavailable' : (isPermissionDenied ? 'database_permission_denied' : 'internal_error'),
@@ -361,8 +402,11 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
 reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const uid = req.user?.uid;
   const token = req.token;
-  const isTesting = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
-  const passToken = isTesting ? undefined : token;
+  // USER-AUTHORIZED READS only; never a write authority.
+  const readToken = token;
+  const readTransport: 'firestore_rest_user_token' | 'admin_sdk' = isReadUsingUserToken(readToken)
+    ? 'firestore_rest_user_token'
+    : 'admin_sdk';
 
   if (!uid) {
     res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
@@ -380,11 +424,9 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
   }
 
   try {
-    // 1. Authoritative conversation verification
-    console.log(`[STAGE_TRACE] stage: conversation_lookup | transport: ${passToken ? 'firestore_rest_user_token' : 'admin_sdk'} | database: named | status: enter`);
-    const conversation = passToken
-      ? await getConversation(uid, conversationId, passToken)
-      : await getConversation(uid, conversationId);
+    // 1. Authoritative conversation verification (USER-AUTHORIZED READ)
+    console.log(`[STAGE_TRACE] stage: conversation_lookup | readTransport: ${readTransport} | database: named | status: enter`);
+    const conversation = await getConversation(uid, conversationId, readToken);
     if (!conversation) {
       res.status(404).json({
         error: 'conversation_not_found',
@@ -402,10 +444,8 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
       return;
     }
 
-    // 2. Read authoritative message history
-    const messages = passToken
-      ? await getAuthoritativeMessages(uid, conversationId, 50, passToken)
-      : await getAuthoritativeMessages(uid, conversationId, 50);
+    // 2. Read authoritative message history (USER-AUTHORIZED READ)
+    const messages = await getAuthoritativeMessages(uid, conversationId, 50, readToken);
     if (messages.length === 0) {
       res.status(400).json({
         error: 'empty_conversation',
@@ -435,7 +475,8 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
     const summary = await generateConversationSummary(turns);
 
     // 5. Atomically update conversation to completed state with summary
-    await completeAndSummarizeConversation(uid, conversationId, summary, passToken);
+    //    (BACKEND-OWNED WRITE — privileged Admin SDK only, no user token)
+    await completeAndSummarizeConversation(uid, conversationId, summary, undefined);
 
     res.status(200).json({
       conversationId,
@@ -443,6 +484,18 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
       status: 'completed',
     });
   } catch (error: any) {
+    // Capability error: privileged persistence unavailable in this
+    // runtime. Fail closed; do NOT mark the conversation as
+    // completed when the summary write could not occur.
+    if (error instanceof BackendPersistenceUnavailableError) {
+      const apiResp = toBackendPersistenceApiResponse(error, 'completeAndSummarizeConversation');
+      res.status(apiResp.status).json({
+        error: apiResp.body.error,
+        message: apiResp.body.message,
+      });
+      return;
+    }
+
     // On failure: conversation remains active, messages remain intact, retry is possible
     if (error?.message?.includes('GEMINI_CONFIGURATION_ERROR')) {
       res.status(503).json({
@@ -475,8 +528,10 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
 reflectionRouter.delete('/api/conversations/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const uid = req.user?.uid;
   const token = req.token;
-  const isTesting = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
-  const passToken = isTesting ? undefined : token;
+  // USER-AUTHORIZED DELETE (rules allow owner delete of conversation
+  // + subcollection messages). May use user-token REST for AI Studio
+  // preview compatibility.
+  const deleteToken = token;
 
   const conversationId = req.params.id;
   console.log(`[DIAG_DELETE_STAGE] stage: delete_route_entered | conversationId: ${conversationId}`);
@@ -497,7 +552,7 @@ reflectionRouter.delete('/api/conversations/:id', requireAuth, async (req: Authe
   }
 
   try {
-    const diag = await deleteConversationServer(uid, conversationId, passToken);
+    const diag = await deleteConversationServer(uid, conversationId, deleteToken);
     res.status(200).json({
       conversationId,
       success: true,
@@ -512,4 +567,3 @@ reflectionRouter.delete('/api/conversations/:id', requireAuth, async (req: Authe
     });
   }
 });
-

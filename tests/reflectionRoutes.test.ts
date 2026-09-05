@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import type { Server } from 'http';
-import { reflectionRouter } from '../server/routes/reflection';
-import * as adminHelper from '../server/firebaseAdmin';
-import * as conversationService from '../server/services/conversationService';
-import * as rateLimiter from '../server/services/rateLimiter';
-import * as geminiService from '../server/services/geminiService';
+import { reflectionRouter } from '../server/routes/reflection.js';
+import * as adminHelper from '../server/firebaseAdmin.js';
+import * as conversationService from '../server/services/conversationService.js';
+import * as rateLimiter from '../server/services/rateLimiter.js';
+import * as geminiService from '../server/services/geminiService.js';
 
 describe('Milestone 3 Reflection & Summarization Routes', () => {
   let app: express.Express;
@@ -112,7 +112,11 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       const data = await res.json();
       expect(res.status).toBe(404);
       expect(data.error).toBe('conversation_not_found');
-      expect(conversationService.getConversation).toHaveBeenCalledWith('user_123', 'conv_missing');
+      expect(conversationService.getConversation).toHaveBeenCalledWith(
+        'user_123',
+        'conv_missing',
+        'valid_token'
+      );
     });
 
     it('returns 409 when conversation is already completed', async () => {
@@ -138,6 +142,11 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       const data = await res.json();
       expect(res.status).toBe(409);
       expect(data.error).toBe('conversation_completed');
+      expect(conversationService.getConversation).toHaveBeenCalledWith(
+        'user_123',
+        'conv_1',
+        'valid_token'
+      );
     });
 
     it('enforces deterministic pre-AI crisis screener and bypasses Gemini on self-harm language', async () => {
@@ -202,7 +211,7 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
         },
       ]);
 
-      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValue({
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
         allowed: false,
         count: 10,
         limit: 10,
@@ -250,7 +259,7 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
         },
       ]);
 
-      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValue({
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
         allowed: true,
         count: 1,
         limit: 10,
@@ -285,10 +294,15 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       expect(data.message.role).toBe('assistant');
       expect(data.message.content).toBe('What feels like the heaviest part of tomorrow for you?');
 
+      // SECURITY: persistAssistantMessage MUST ignore the user token parameter
+      // for backend-owned writes. The function signature accepts a token for
+      // legacy compatibility but it is explicitly ignored to enforce the
+      // privilege boundary.
       expect(conversationService.persistAssistantMessage).toHaveBeenCalledWith(
         'user_123',
         'conv_1',
-        'What feels like the heaviest part of tomorrow for you?'
+        'What feels like the heaviest part of tomorrow for you?',
+        undefined
       );
     });
   });
@@ -307,6 +321,11 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       const data = await res.json();
       expect(res.status).toBe(404);
       expect(data.error).toBe('conversation_not_found');
+      expect(conversationService.getConversation).toHaveBeenCalledWith(
+        'user_123',
+        'conv_404',
+        'valid_token'
+      );
     });
 
     it('returns 409 if conversation is already completed', async () => {
@@ -330,6 +349,12 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       const data = await res.json();
       expect(res.status).toBe(409);
       expect(data.error).toBe('already_completed');
+      expect(data.summary).toBe('Existing summary');
+      expect(conversationService.getConversation).toHaveBeenCalledWith(
+        'user_123',
+        'conv_1',
+        'valid_token'
+      );
     });
 
     it('handles summarization failure gracefully without changing conversation status', async () => {
@@ -393,7 +418,7 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
         { id: 'm2', role: 'assistant', content: 'Turn 2', createdAt: null },
       ]);
 
-      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValue({
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
         allowed: true,
         count: 2,
         limit: 10,
@@ -423,6 +448,10 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       expect(data.conversationId).toBe('conv_1');
       expect(data.status).toBe('completed');
       expect(data.summary).toContain('Key Themes');
+      // SECURITY: completeAndSummarizeConversation MUST ignore the user token
+      // parameter for backend-owned writes. The function signature accepts a
+      // token for legacy compatibility but it is explicitly ignored to enforce
+      // the privilege boundary.
       expect(completeSpy).toHaveBeenCalledWith(
         'user_123',
         'conv_1',

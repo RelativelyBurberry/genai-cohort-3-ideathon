@@ -2,9 +2,12 @@ import { getAdminDb } from '../firebaseAdmin.js';
 import {
   getUserEntriesRest,
   getUserConversationsRest,
-  persistInsightRest,
   getLatestInsightRest,
 } from './firestoreRestService.js';
+import {
+  withBackendPersistenceCapability,
+  BackendPersistenceUnavailableError,
+} from './privilegedPersistence.js';
 import type { RawEntry, RawConversation } from './patternShiftEngine.js';
 
 /**
@@ -14,8 +17,16 @@ import type { RawEntry, RawConversation } from './patternShiftEngine.js';
  * 1. All data lookups strictly scoped to `/users/{verifiedUid}/...`.
  * 2. Generated insights stored under `/users/{verifiedUid}/insights/{insightId}`.
  * 3. Never queries across multiple users.
+ * 4. Backend-owned writes (insight persistence) use privileged Admin SDK
+ *    authority only. NEVER user-token REST.
  */
 
+/**
+ * Fetch user's journal entries for PatternShift analysis.
+ *
+ * USER-AUTHORIZED READ. May use user ID token over REST for AI Studio
+ * compatibility.
+ */
 export async function fetchUserEntriesForPatternShift(
   uid: string,
   token?: string
@@ -41,6 +52,12 @@ export async function fetchUserEntriesForPatternShift(
   });
 }
 
+/**
+ * Fetch user's conversations for PatternShift analysis.
+ *
+ * USER-AUTHORIZED READ. May use user ID token over REST for AI Studio
+ * compatibility.
+ */
 export async function fetchUserConversationsForPatternShift(
   uid: string,
   token?: string
@@ -66,31 +83,46 @@ export async function fetchUserConversationsForPatternShift(
   });
 }
 
+/**
+ * Persist a generated PatternShift insight.
+ *
+ * BACKEND-OWNED WRITE. Privileged Admin SDK authority only.
+ * The token parameter is ignored for security - NEVER falls back to
+ * user-token REST. If the runtime lacks Firestore IAM, throws
+ * BackendPersistenceUnavailableError.
+ */
 export async function persistPatternShiftInsight(
   uid: string,
   insight: any,
   token?: string
 ): Promise<void> {
-  if (token) {
-    await persistInsightRest(token, uid, insight);
-    return;
-  }
+  // SECURITY: Ignore token parameter. Backend-owned writes MUST use
+  // privileged Admin SDK authority only. The token is only for
+  // user-authorized operations (reads/deletes) to maintain AI Studio
+  // compatibility.
+  await withBackendPersistenceCapability('persistPatternShiftInsight', async () => {
+    const db = getAdminDb();
+    const insightRef = db.collection('users').doc(uid).collection('insights').doc(insight.id);
 
-  const db = getAdminDb();
-  const insightRef = db.collection('users').doc(uid).collection('insights').doc(insight.id);
-
-  await insightRef.set({
-    id: insight.id,
-    generatedAt: insight.generatedAt,
-    timeRange: insight.timeRange,
-    itemCount: insight.itemCount,
-    metrics: insight.metrics,
-    observations: insight.observations,
-    suggestedInquiries: insight.suggestedInquiries,
-    type: insight.type || 'patternshift',
+    await insightRef.set({
+      id: insight.id,
+      generatedAt: insight.generatedAt,
+      timeRange: insight.timeRange,
+      itemCount: insight.itemCount,
+      metrics: insight.metrics,
+      observations: insight.observations,
+      suggestedInquiries: insight.suggestedInquiries,
+      type: insight.type || 'patternshift',
+    });
   });
 }
 
+/**
+ * Fetch the latest PatternShift insight for a user.
+ *
+ * USER-AUTHORIZED READ. May use user ID token over REST for AI Studio
+ * compatibility.
+ */
 export async function fetchLatestPatternShiftInsight(
   uid: string,
   token?: string
@@ -125,3 +157,6 @@ export async function fetchLatestPatternShiftInsight(
     type: data.type || 'patternshift',
   };
 }
+
+// Re-export for callers that need to detect the capability error
+export { BackendPersistenceUnavailableError };
