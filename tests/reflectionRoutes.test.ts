@@ -14,6 +14,10 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    // The /api/reflect handler fail-closes with 503 when GEMINI_API_KEY is absent
+    // (server/routes/reflection.ts). Test-local dummy key satisfies the gate;
+    // Gemini is mocked in every test that reaches it, so no real client is ever built.
+    vi.stubEnv('GEMINI_API_KEY', 'test-dummy-gemini-api-key');
 
     // Mock Firebase Admin Auth verifyIdToken
     vi.spyOn(adminHelper, 'getAdminAuth').mockReturnValue({
@@ -44,6 +48,7 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     if (server) {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
