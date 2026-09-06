@@ -9700,10 +9700,6 @@ textarea.input,
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-7px); }
 }
-@keyframes reflectra-grain-shift {
-  from { background-position: 0 0; }
-  to   { background-position: 128px 96px; }
-}
 @keyframes reflectra-shimmer {
   from { background-position: -180% 0; }
   to   { background-position: 180% 0; }
@@ -9833,18 +9829,6 @@ textarea.input,
   position: relative;
   animation: reflectra-fade-in 0.8s ease both;
 }
-/* Ambient grain wash — barely perceptible, breathes slowly. */
-.landing-shell::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.045;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
-  animation: reflectra-grain-shift 14s steps(2) infinite, reflectra-breathe 9s ease-in-out 1.6s infinite;
-}
-
 /* Nav: enters first. */
 .landing-nav {
   animation: reflectra-fade-in 0.7s ease 0.05s both;
@@ -10179,7 +10163,6 @@ input[type='time'] {
     opacity: 1 !important;
     transform: none !important;
   }
-  .landing-shell::after,
   .home-dashboard .week-dots > div,
   .reflection-thinking-dots i,
   .reflectra-boot-loader .boot-copy,
