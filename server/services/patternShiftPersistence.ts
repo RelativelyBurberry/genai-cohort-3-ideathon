@@ -1,12 +1,9 @@
 import { getAdminDb } from '../firebaseAdmin.js';
 import {
-  getUserEntriesRest,
-  getUserConversationsRest,
-  getLatestInsightRest,
-} from './firestoreRestService.js';
-import {
   withBackendPersistenceCapability,
+  withBackendReadCapability,
   BackendPersistenceUnavailableError,
+  BackendReadUnavailableError,
 } from './privilegedPersistence.js';
 import type { RawEntry, RawConversation } from './patternShiftEngine.js';
 
@@ -19,68 +16,73 @@ import type { RawEntry, RawConversation } from './patternShiftEngine.js';
  * 3. Never queries across multiple users.
  * 4. Backend-owned writes (insight persistence) use privileged Admin SDK
  *    authority only. NEVER user-token REST.
+ * 5. Backend-owned reads (entries, conversations, latest insight) use the
+ *    Admin SDK privileged authority. The Firebase ID token is NEVER
+ *    forwarded to the Google Cloud Firestore REST API — Firebase Auth ID
+ *    tokens are not Google OAuth2 access tokens and Firestore REST
+ *    rejects them (401 UNAUTHENTICATED / ACCESS_TOKEN_TYPE_UNSUPPORTED).
+ *    Where the runtime lacks Firestore read IAM, reads throw
+ *    `BackendReadUnavailableError` and the PatternShift route may use a
+ *    validated, narrowly scoped client-supplied payload instead.
  */
 
 /**
  * Fetch user's journal entries for PatternShift analysis.
  *
- * USER-AUTHORIZED READ. May use user ID token over REST for AI Studio
- * compatibility.
+ * BACKEND-OWNED READ. Privileged Admin SDK authority only. The user's
+ * Firebase ID token is deliberately NOT accepted: it must never be used
+ * as a Google OAuth2 access token against Firestore REST.
+ *
+ * If the runtime lacks Firestore read IAM (AI Studio preview sandbox),
+ * throws `BackendReadUnavailableError`.
  */
-export async function fetchUserEntriesForPatternShift(
-  uid: string,
-  token?: string
-): Promise<RawEntry[]> {
-  if (token) {
-    return await getUserEntriesRest(token, uid);
-  }
+export async function fetchUserEntriesForPatternShift(uid: string): Promise<RawEntry[]> {
+  return withBackendReadCapability('fetchUserEntriesForPatternShift', async () => {
+    const db = getAdminDb();
+    const entriesSnap = await db.collection('users').doc(uid).collection('entries').get();
 
-  const db = getAdminDb();
-  const entriesSnap = await db.collection('users').doc(uid).collection('entries').get();
-
-  return entriesSnap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      title: data.title || '',
-      content: data.content || '',
-      moodRating: typeof data.moodRating === 'number' ? data.moodRating : undefined,
-      tags: Array.isArray(data.tags) ? data.tags : [],
-      createdAt: data.createdAt || null,
-      updatedAt: data.updatedAt || null,
-      location: data.location || null,
-    };
+    return entriesSnap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title || '',
+        content: data.content || '',
+        moodRating: typeof data.moodRating === 'number' ? data.moodRating : undefined,
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        createdAt: data.createdAt || null,
+        updatedAt: data.updatedAt || null,
+        location: data.location || null,
+      };
+    });
   });
 }
 
 /**
  * Fetch user's conversations for PatternShift analysis.
  *
- * USER-AUTHORIZED READ. May use user ID token over REST for AI Studio
- * compatibility.
+ * BACKEND-OWNED READ. Privileged Admin SDK authority only. See
+ * `fetchUserEntriesForPatternShift` for the ID-token rationale.
+ *
+ * If the runtime lacks Firestore read IAM (AI Studio preview sandbox),
+ * throws `BackendReadUnavailableError`.
  */
-export async function fetchUserConversationsForPatternShift(
-  uid: string,
-  token?: string
-): Promise<RawConversation[]> {
-  if (token) {
-    return await getUserConversationsRest(token, uid);
-  }
+export async function fetchUserConversationsForPatternShift(uid: string): Promise<RawConversation[]> {
+  return withBackendReadCapability('fetchUserConversationsForPatternShift', async () => {
+    const db = getAdminDb();
+    const convsSnap = await db.collection('users').doc(uid).collection('conversations').get();
 
-  const db = getAdminDb();
-  const convsSnap = await db.collection('users').doc(uid).collection('conversations').get();
-
-  return convsSnap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      title: data.title || '',
-      summary: data.summary || null,
-      status: data.status || 'active',
-      createdAt: data.createdAt || null,
-      updatedAt: data.updatedAt || null,
-      summaryUpdatedAt: data.summaryUpdatedAt || null,
-    };
+    return convsSnap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title || '',
+        summary: data.summary || null,
+        status: data.status || 'active',
+        createdAt: data.createdAt || null,
+        updatedAt: data.updatedAt || null,
+        summaryUpdatedAt: data.summaryUpdatedAt || null,
+      };
+    });
   });
 }
 
@@ -98,9 +100,7 @@ export async function persistPatternShiftInsight(
   token?: string
 ): Promise<void> {
   // SECURITY: Ignore token parameter. Backend-owned writes MUST use
-  // privileged Admin SDK authority only. The token is only for
-  // user-authorized operations (reads/deletes) to maintain AI Studio
-  // compatibility.
+  // privileged Admin SDK authority only.
   await withBackendPersistenceCapability('persistPatternShiftInsight', async () => {
     const db = getAdminDb();
     const insightRef = db.collection('users').doc(uid).collection('insights').doc(insight.id);
@@ -122,44 +122,43 @@ export async function persistPatternShiftInsight(
 /**
  * Fetch the latest PatternShift insight for a user.
  *
- * USER-AUTHORIZED READ. May use user ID token over REST for AI Studio
- * compatibility.
+ * BACKEND-OWNED READ. Privileged Admin SDK authority only. The user's
+ * Firebase ID token is deliberately NOT accepted (see
+ * `fetchUserEntriesForPatternShift`).
+ *
+ * If the runtime lacks Firestore read IAM (AI Studio preview sandbox),
+ * throws `BackendReadUnavailableError`.
  */
-export async function fetchLatestPatternShiftInsight(
-  uid: string,
-  token?: string
-): Promise<any | null> {
-  if (token) {
-    return await getLatestInsightRest(token, uid);
-  }
+export async function fetchLatestPatternShiftInsight(uid: string): Promise<any | null> {
+  return withBackendReadCapability('fetchLatestPatternShiftInsight', async () => {
+    const db = getAdminDb();
+    const insightsSnap = await db
+      .collection('users')
+      .doc(uid)
+      .collection('insights')
+      .orderBy('generatedAt', 'desc')
+      .limit(1)
+      .get();
 
-  const db = getAdminDb();
-  const insightsSnap = await db
-    .collection('users')
-    .doc(uid)
-    .collection('insights')
-    .orderBy('generatedAt', 'desc')
-    .limit(1)
-    .get();
+    if (insightsSnap.empty) {
+      return null;
+    }
 
-  if (insightsSnap.empty) {
-    return null;
-  }
-
-  const doc = insightsSnap.docs[0];
-  const data = doc.data();
-  return {
-    id: doc.id,
-    generatedAt: data.generatedAt || null,
-    timeRange: data.timeRange || { start: '', end: '' },
-    itemCount: data.itemCount || { entries: 0, completedConversations: 0, total: 0 },
-    metrics: data.metrics || null,
-    observations: data.observations || [],
-    suggestedInquiries: data.suggestedInquiries || [],
-    intelligence: data.intelligence || null,
-    type: data.type || 'patternshift',
-  };
+    const doc = insightsSnap.docs[0];
+    const data = doc.data();
+    return {
+      id: doc.id,
+      generatedAt: data.generatedAt || null,
+      timeRange: data.timeRange || { start: '', end: '' },
+      itemCount: data.itemCount || { entries: 0, completedConversations: 0, total: 0 },
+      metrics: data.metrics || null,
+      observations: data.observations || [],
+      suggestedInquiries: data.suggestedInquiries || [],
+      intelligence: data.intelligence || null,
+      type: data.type || 'patternshift',
+    };
+  });
 }
 
-// Re-export for callers that need to detect the capability error
-export { BackendPersistenceUnavailableError };
+// Re-export for callers that need to detect the capability errors
+export { BackendPersistenceUnavailableError, BackendReadUnavailableError };

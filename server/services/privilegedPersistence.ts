@@ -55,6 +55,66 @@ export class BackendPersistenceUnavailableError extends Error {
 }
 
 /**
+ * Stable machine-readable error code returned to callers when a
+ * backend-owned Firestore READ cannot complete because the runtime
+ * lacks privileged Firestore IAM authority.
+ *
+ * This is distinct from `BACKEND_PERSISTENCE_UNAVAILABLE` (writes).
+ * The PatternShift route uses it to decide when a narrowly scoped,
+ * validated client-supplied analysis payload may be used instead of
+ * server-side Firestore reads — and ONLY for that verified capability
+ * failure, never for arbitrary errors.
+ */
+export const BACKEND_READ_UNAVAILABLE = 'BACKEND_READ_UNAVAILABLE';
+
+/**
+ * Typed error representing the absence of privileged Firestore READ
+ * authority in the current runtime (e.g. the constrained AI Studio
+ * preview sandbox where the service account lacks Firestore IAM).
+ *
+ * Safe to surface across the API boundary: it carries a stable error
+ * code and a generic, non-leaking message.
+ */
+export class BackendReadUnavailableError extends Error {
+  public readonly code: string = BACKEND_READ_UNAVAILABLE;
+  public readonly operation: string;
+
+  constructor(operation: string, cause?: unknown) {
+    super(
+      'Privileged backend Firestore reads are unavailable in the current runtime.'
+    );
+    this.name = 'BackendReadUnavailableError';
+    this.operation = operation;
+    if (cause !== undefined) {
+      (this as any).cause = cause;
+    }
+  }
+}
+
+/**
+ * Wrap a backend-owned READ operation so that any Admin SDK permission
+ * failure is converted to a `BackendReadUnavailableError`. Other errors
+ * are rethrown unchanged so legitimate bugs are never masked.
+ *
+ * NOTE: This is a verified *infrastructure capability* signal only.
+ * Authentication/authorization failures and malformed data are NOT
+ * mapped here — they propagate unchanged.
+ */
+export async function withBackendReadCapability<T>(
+  operation: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isAdminPermissionDeniedError(err)) {
+      throw new BackendReadUnavailableError(operation, err);
+    }
+    throw err;
+  }
+}
+
+/**
  * Classify an error from the Firebase Admin SDK as a privileged-
  * authority failure. Returns true when the error indicates the
  * runtime identity lacks Firestore IAM (e.g. `code === 7`, a numeric

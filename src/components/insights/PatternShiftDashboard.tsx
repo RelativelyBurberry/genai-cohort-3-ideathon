@@ -512,7 +512,7 @@ const PatternIntelligenceSections: React.FC<{
 };
 
 export const PatternShiftDashboard: React.FC = () => {
-  const { getIdToken } = useAuth();
+  const { getIdToken, user } = useAuth();
   const { isDemoSession, demoPatternInsight } = useDemo();
   const isDemo = useIsDemoSession();
   const [insight, setInsight] = useState<PatternShiftInsight | null>(null);
@@ -523,6 +523,10 @@ export const PatternShiftDashboard: React.FC = () => {
     required: number;
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Phase 10 remediation: subtle, non-alarming note shown when an insight
+  // was generated successfully but could NOT be persisted because the
+  // preview runtime lacks backend Firestore IAM.
+  const [persistenceNotice, setPersistenceNotice] = useState<string | null>(null);
 
   // Load existing persisted insight on mount (or demo insight)
   useEffect(() => {
@@ -536,6 +540,7 @@ export const PatternShiftDashboard: React.FC = () => {
     async function loadLatest() {
       setLoadingLatest(true);
       setErrorMessage(null);
+      setPersistenceNotice(null);
       try {
         const latest = await fetchLatestInsight(getIdToken);
         if (isMounted) {
@@ -573,16 +578,27 @@ export const PatternShiftDashboard: React.FC = () => {
 
     setAnalyzing(true);
     setErrorMessage(null);
+    setPersistenceNotice(null);
     try {
-      const response: PatternShiftResponse = await triggerPatternAnalysis(getIdToken);
+      const response: PatternShiftResponse = await triggerPatternAnalysis(
+        getIdToken,
+        user?.uid
+      );
       if (response.status === 'success') {
         setInsight(response.insight);
         setInsufficientDataInfo(null);
+        if (response.persistence && response.persistence.persisted === false) {
+          setPersistenceNotice(
+            'This analysis is shown live but may not be saved in the current preview environment.'
+          );
+        }
       } else if (response.status === 'insufficient_data') {
         setInsufficientDataInfo({
           available: response.available,
           required: response.required,
         });
+      } else if (response.status === 'client_data_required') {
+        setPersistenceNotice(response.message);
       } else {
         setErrorMessage(response.message || 'Analysis failed.');
       }
@@ -663,6 +679,16 @@ export const PatternShiftDashboard: React.FC = () => {
             <span className="font-semibold">Analysis Encountered an Issue</span>
             <p className="text-rose-700">{errorMessage}</p>
           </div>
+        </div>
+      )}
+
+      {/* Phase 10 Remediation: Subtle Preview Persistence Notice */}
+      {/* Shown ONLY when an insight was successfully generated but the
+          preview runtime could not persist it. Not an error state. */}
+      {persistenceNotice && !errorMessage && (
+        <div id="patternshift-persistence-notice" className="patternshift-persistence-notice">
+          <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <p>{persistenceNotice}</p>
         </div>
       )}
 

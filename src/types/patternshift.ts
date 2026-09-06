@@ -68,15 +68,36 @@ export interface PatternShiftInsight {
   type: 'patternshift';
 }
 
+/**
+ * Explicit persistence status returned alongside a successfully
+ * generated insight.
+ *
+ * - `persisted: true`  → normal production behavior, insight saved.
+ * - `persisted: false` → the insight was generated successfully but the
+ *   backend could not write it because the runtime lacks backend
+ *   Firestore IAM (AI Studio preview sandbox). The analysis is still
+ *   delivered to the authenticated caller.
+ */
+export interface PatternShiftPersistenceStatus {
+  persisted: boolean;
+  /** Present only when `persisted` is false. */
+  reason?: string;
+}
+
 export type PatternShiftResponse =
   | {
       status: 'success';
       insight: PatternShiftInsight;
+      persistence?: PatternShiftPersistenceStatus;
     }
   | {
       status: 'insufficient_data';
       required: number;
       available: number;
+      message: string;
+    }
+  | {
+      status: 'client_data_required';
       message: string;
     }
   | {

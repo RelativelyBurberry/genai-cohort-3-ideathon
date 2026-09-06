@@ -4,6 +4,7 @@ import {
   addDoc,
   deleteDoc,
   updateDoc,
+  getDocs,
   query,
   orderBy,
   onSnapshot,
@@ -93,6 +94,33 @@ export function subscribeToConversations(
       if (onError) onError(err);
     }
   );
+}
+
+/**
+ * One-time fetch of all conversations for the authenticated user.
+ * Used by the PatternShift client fallback to build the minimal,
+ * validated analysis payload when the backend cannot read Firestore.
+ * Owner-scoped via Firestore security rules.
+ */
+export async function getConversations(uid: string): Promise<Conversation[]> {
+  assertValidUid(uid);
+
+  const colRef = collection(db, 'users', uid, 'conversations');
+  const q = query(colRef, orderBy('updatedAt', 'desc'));
+  const snapshot = await getDocs(q);
+
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      title: data.title || 'Untitled Reflection',
+      summary: data.summary || null,
+      status: data.status || 'active',
+      createdAt: data.createdAt || null,
+      updatedAt: data.updatedAt || null,
+      summaryUpdatedAt: data.summaryUpdatedAt || null,
+    };
+  });
 }
 
 /**

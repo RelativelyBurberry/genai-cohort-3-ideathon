@@ -1,6 +1,6 @@
 # Phase 10 — PatternShift Stabilization & Extended Intelligence
 
-## 1. Root Cause (STEP 0)
+## 1. Original Root Cause (STEP 0)
 
 The reported UI failure ("Failed to complete pattern analysis. Please try again later.") was an HTTP 500 returned by `POST /api/patternshift/analyze`. The chain, verified with a reproduction in a scratch test and the runtime `[PATTERNSHIFT_ANALYZE_ERROR]` log:
 
@@ -15,7 +15,7 @@ Three distinct defects were found and fixed:
 - **Defect B (the real bug) — poisoned secret cache:** `getSecret()` evicted failed entries from `SECRET_CACHE` *inside* an `.catch()` attached synchronously to the promise, but the env-var path **throws synchronously before the promise exists**, so the inner catch ran and then the rejected promise was re-added to `SECRET_CACHE` by the outer caching logic. Result: the missing-key error was cached forever.
 - **Defect C — misleading status code:** `patternShift.ts` returned a generic 500 for configuration failures, while the reflection route already classified `GEMINI_CONFIGURATION_ERROR` as 503.
 
-## 2. Fixes (STEP 1) — minimal, in-scope, fail-closed
+## 2. Original Fixes (STEP 1) — minimal, in-scope, fail-closed
 
 | File | Change |
 | --- | --- |
@@ -25,7 +25,99 @@ Three distinct defects were found and fixed:
 
 Constraints honored: no demo fallback in production, no error suppression, no Gemini disabling, no hardcoded success, no backend replacement.
 
-## 3. Extended Intelligence Modules (STEP 2)
+---
+
+## 3. PatternShift Runtime Remediation (Phase 10 Extension)
+
+### 3.1. Confirmed Additional Root Causes (Diagnostic Report)
+
+Two independently verified runtime issues beyond the original Phase 10 scope:
+
+#### Issue A — Immediate Failure (Firebase ID Token → Firestore REST)
+`server/services/firestoreRestService.ts` sent Firebase Auth ID tokens (`eyJ...`) to the Google Cloud Firestore v1 REST API. Firestore REST rejects this with:
+
+```
+401 UNAUTHENTICATED
+ACCESS_TOKEN_TYPE_UNSUPPORTED
+```
+
+**Root Cause**: Firebase Auth ID tokens are **not** Google OAuth2 access tokens and **cannot** authenticate Google Cloud REST APIs. The architecture incorrectly forwarded Firebase ID tokens as Bearer tokens to Firestore REST.
+
+#### Issue B — Downstream Sandbox Limitation (Backend Persistence IAM)
+Firebase Admin persistence fails in Google AI Studio preview because the sandbox service account lacks Firestore write IAM permissions. Analysis succeeded but the entire request failed due to persistence failure.
+
+**Note**: Gemini API configuration and Gemini generation are VERIFIED HEALTHY.
+
+### 3.2. Remediation Architecture
+
+#### Part 1: Firestore Data Fetch — Admin SDK ONLY
+- **Backend-owned reads** (entries, conversations, latest insight): NOW use privileged Admin SDK ONLY
+- Firebase ID token is NEVER forwarded to Google Cloud Firestore REST
+- If runtime lacks Firestore read IAM (AI Studio sandbox): throws `BackendReadUnavailableError`
+- **Verified capability fallback ONLY**: Client may supply minimal, validated `analysisPayload` built from its OWN authenticated Firestore reads
+- Identity ALWAYS comes from `requireAuth` middleware; payload schema does NOT include `uid` field
+
+#### Part 2: Persistence Capability Handling — Honest Metadata
+- **Normal production**: `persistPatternShiftInsight` succeeds → response includes `{ persistence: { persisted: true } }`
+- **Infrastructure capability failure ONLY** (backend IAM unavailable): Analysis succeeds, insight returned with `{ persistence: { persisted: false, reason: 'backend_persistence_unavailable' } }`
+- **NOT applied to**: auth failures, authorization failures, malformed data, validation errors, arbitrary Firestore errors
+- Unexpected errors still fail normally (500)
+
+#### Part 3: UI Behavior
+- PatternShiftDashboard shows subtle, non-alarming notice when `persisted: false`
+- Does NOT show "Analysis Encountered an Issue" error banner
+- Insight displayed normally
+
+#### Part 4: Demo Mode — Preserved
+- Zero Firebase calls, zero backend API calls (where bypassed)
+- localStorage-only demo persistence
+- Synthetic data isolation
+- Existing demo PatternShift insight continues working
+
+#### Part 5: Testing — 9 Required Scenarios (All Passing)
+1. Firebase ID token is NOT forwarded to Google Firestore REST
+2. Server-side Firestore path works when backend capability exists
+3. Client-provided fallback only activates for verified backend infrastructure capability failures
+4. Request uid cannot override authenticated req.user.uid
+5. Malformed client analysis payload is rejected
+6. Successful Gemini analysis returned even when persistence fails due to infrastructure IAM
+7. Unexpected persistence errors still fail normally
+8. Production persistence success remains unchanged
+9. Demo mode remains isolated
+
+### 3.3. Files Changed — Remediation
+
+**Server-side changes:**
+
+| File | Change |
+| --- | --- |
+| `server/services/privilegedPersistence.ts` | Added `BackendReadUnavailableError` class and `withBackendReadCapability` wrapper. New error code `BACKEND_READ_UNAVAILABLE` for verified infrastructure read capability failures only. |
+| `server/services/patternShiftPayload.ts` | **NEW** — Minimal, strictly validated client analysis payload. Schema includes ONLY fields required by PatternShift engine (id/title/content/moodRating/tags/createdAt/updatedAt/location for entries; id/title/summary/createdAt/updatedAt/summaryUpdatedAt for completed conversations). Rejects unknown keys, out-of-bounds values, and any `uid` field. Limits: max 200 entries, 200 conversations. |
+| `server/services/patternShiftPersistence.ts` | **REWRITTEN** — All reads (`fetchUserEntriesForPatternShift`, `fetchUserConversationsForPatternShift`, `fetchLatestPatternShiftInsight`) now use Admin SDK ONLY with `withBackendReadCapability`. NO token parameter accepted. Throws `BackendReadUnavailableError` on IAM failure. Write (`persistPatternShiftInsight`) unchanged — still Admin SDK only with `BackendPersistenceUnavailableError`. |
+| `server/routes/patternShift.ts` | **REWRITTEN** — POST `/analyze` tries Admin SDK reads first. On `BackendReadUnavailableError`: if client provided `analysisPayload`, uses validated payload; if no payload, returns `200 { status: 'client_data_required' }`. Persistence: on `BackendPersistenceUnavailableError`, returns `{ persistence: { persisted: false, reason: 'backend_persistence_unavailable' } }` with the successful insight. GET `/latest`: on `BackendReadUnavailableError`, returns `null` insight gracefully. |
+
+**Client-side changes:**
+
+| File | Change |
+| --- | --- |
+| `src/types/patternshift.ts` | Added `PatternShiftPersistenceStatus` interface and `client_data_required` to `PatternShiftResponse` union. |
+| `src/services/reflectionService.ts` | Added `getConversations(uid)` one-shot fetch for client fallback payload building. |
+| `src/services/patternShiftService.ts` | **REWRITTEN** — `triggerPatternAnalysis` now: (1) tries normal server analysis; (2) on `client_data_required`, builds minimal `analysisPayload` from client's own authenticated Firestore reads (journal entries + completed conversations); (3) retries with payload. **Privacy**: location coordinates NEVER sent — only user-provided label included. |
+| `src/components/insights/PatternShiftDashboard.tsx` | Added `persistenceNotice` state. Shows subtle `.patternshift-persistence-notice` when `persistence.persisted === false` OR `status === 'client_data_required'`. Does NOT show error banner. |
+| `src/index.css` | Added `.patternshift-persistence-notice` style (muted, non-alarming). |
+
+### 3.4. Security Boundaries Preserved
+
+- **Backend reads**: Admin SDK only — Firebase ID tokens NEVER reach Google Cloud Firestore REST API for PatternShift
+- **Backend writes**: Admin SDK only — unchanged
+- **Client payload**: Minimal schema, unknown keys rejected, no `uid` field, no raw message content, no coordinates
+- **Identity**: Always derived from verified token via `requireAuth` — request body `uid` ignored
+- **Capability fallback**: Only activates for verified `BackendReadUnavailableError` (code 7 / PERMISSION_DENIED from Admin SDK). NOT for auth failures, validation errors, or arbitrary errors.
+- **Demo isolation**: Zero Firebase/backend calls, localStorage-only, synthetic data, unchanged
+
+---
+
+## 4. Extended Intelligence Modules (STEP 2)
 
 New pure, deterministic, framework-independent modules in `src/intelligence/patternAnalysis/`:
 
@@ -40,7 +132,7 @@ New pure, deterministic, framework-independent modules in `src/intelligence/patt
 
 Every surfaced observation carries `PatternEvidence { sampleSize, confidence, explanation, breakdown?, periodStart?, periodEnd? }` so the UI can answer *"Why am I seeing this?"*. Confidence is graded strictly from sample size (`>=8` strong, `>=5` moderate, else low). Every module returns `insufficient_data` honestly when its threshold isn't met.
 
-## 4. Backend Integration (STEP 3)
+## 5. Backend Integration (STEP 3)
 
 - `patternShiftEngine.ts` → `RawEntry.location`, imports `analyzePatternIntelligence`, exposes `EngineResult.intelligence`.
 - `patternShiftPersistence.ts` → location + intelligence persisted and fetched back.
@@ -48,7 +140,7 @@ Every surfaced observation carries `PatternEvidence { sampleSize, confidence, ex
 - `patternShift.ts` → `newInsight` includes `intelligence`; only `metrics` (never location) is sent to Gemini.
 - `src/types/patternshift.ts` → `intelligence?: PatternIntelligence | null` (old persisted insights stay readable; sections simply don't render).
 
-## 5. UI (STEP 4)
+## 6. UI (STEP 4)
 
 `PatternShiftDashboard.tsx` + `src/index.css`:
 
@@ -60,7 +152,7 @@ Every surfaced observation carries `PatternEvidence { sampleSize, confidence, ex
 - Sections with `insufficient_data` render nothing.
 - All copy keeps the existing editorial, non-clinical voice.
 
-## 6. Demo Fixtures (STEP 5)
+## 7. Demo Fixtures (STEP 5)
 
 `src/demo/demoData.ts`:
 
@@ -70,7 +162,7 @@ Every surfaced observation carries `PatternEvidence { sampleSize, confidence, ex
 
 Verified demo output: mood `upward` (3.0 → 3.75), evening-dominant rhythm (6/9), cadence `increasing`, `#boundaries` + `#gratitude` emerging, 1 unusual late-night reflection flagged, Brooklyn recurring — every Phase 10 UI section renders in demo.
 
-## 7. Tests (STEP 6)
+## 8. Tests (STEP 6 + Remediation)
 
 New / extended test coverage:
 
@@ -81,24 +173,47 @@ New / extended test coverage:
 | `tests/patternShiftRoutes.test.ts` | +2 (11 total) | 503 service_unavailable fail-closed (no fake insight, nothing persisted); success payload includes all six intelligence modules and does **not** leak location into `metrics` |
 | `tests/patternShiftEngine.test.ts` | +4 (15 total) | Intelligence block attached on success, omitted on insufficient data; conversation timestamps feed timing modules; metrics never contain location labels/coordinates |
 | `server/config/secrets.test.ts` | +1 (19 total) | Env-path synchronous-throw no longer permanently poisons `SECRET_CACHE` |
+| `tests/patternShiftPayload.test.ts` | 11 | **REMEDIATION** — Payload validation: schema bounds, unknown-key rejection, uid rejection, coordinate exclusion |
+| `tests/patternShiftPersistence.test.ts` | 6 | **REMEDIATION** — Admin SDK read path, IAM → BackendReadUnavailableError mapping, non-IAM errors pass through, signature assertions (no token arg) |
+| `tests/patternShiftService.test.ts` | 4 | **REMEDIATION** — Client fallback flow, payload building, coordinates excluded, active conversations excluded |
+| `tests/patternShiftDemoIsolation.test.ts` | 4 | **REMEDIATION** — Demo identity/storage synthetic, insight carries intelligence, fixtures demo- namespaced |
+| `tests/patternShiftRemediation.test.ts` | 9 | **REMEDIATION** — All 9 required scenarios from the diagnostic report |
 
-## 8. Regression
+## 9. Regression
 
 - `npx tsc --noEmit` — exit 0.
-- Full `npx vitest run` — **181 passed**, 11 skipped, and exactly the 11 **pre-existing** failures in `tests/demoMode.test.ts` (Category C infrastructure: `globalThis.import.meta` undefined under Vitest 5; unrelated to Phase 10 and reproducible everywhere; intentionally not fixed).
+- Full `npx vitest run` — **217 passed**, 11 skipped, and exactly the 11 **pre-existing** failures in `tests/demoMode.test.ts` (Category C infrastructure: `globalThis.import.meta` undefined under Vitest 5; unrelated to Phase 10 and reproducible everywhere; intentionally not fixed).
 - `npm run build` — success (pre-existing chunk-size warning only).
 - `VITE_DEMO_MODE=true npm run build` — success.
 
-## 9. Known limitations
+## 10. Known Limitations
 
 - A live Gemini call cannot be exercised in this runtime (no real key available); Gemini behavior is verified through the mocked-network boundary tests. The 503 classification is exactly what surfaces in production users' logs when the key is missing.
 - Firestore rules for insights were already owner-read/Admin-write; no rule change was required.
+- The client fallback requires the authenticated client to have local Firestore read access (normal in AI Studio preview). If both backend and client reads fail, analysis returns `client_data_required`.
 
-## 10. Deliverables
+## 11. Deliverables
 
 - `PHASE10_FINAL_QA_VERDICT.txt` — independent Nemotron-QA sweep: **PASS, zero defects** (all 13 validation steps green).
 - This report.
 
-## 11. Stop
+## 12. Independent QA Verification
+
+**Nemotron-QA Verdict (Post-Remediation)**: **PASS, zero defects**
+
+Verification performed by independent Nemotron-QA subagent:
+- TypeScript compilation: ✅ PASSED
+- Full test suite (excluding pre-existing demoMode infra failures): ✅ PASSED (24 test files, 217 passed, 11 skipped)
+- Production build: ✅ PASSED
+- Demo build (VITE_DEMO_MODE=true): ✅ PASSED
+- Firebase ID token NOT forwarded to Google Firestore REST for PatternShift: ✅ VERIFIED
+- All 9 remediation test scenarios: ✅ VERIFIED PASSING
+- Production auth boundaries: ✅ INTACT
+- Demo isolation: ✅ PRESERVED
+- Secret Manager: ✅ NO REGRESSION
+
+## 13. Stop
 
 Phase 10 is complete. Per mission instructions, work stops here: no Phase 11, no RBAC, no notifications work is started.
+
+**HARD STOP.**

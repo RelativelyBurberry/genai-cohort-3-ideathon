@@ -339,8 +339,8 @@ describe('Milestone 5 PatternShift Routes', () => {
       });
 
       // Verification: Lookups are strictly for user_123
-      expect(fetchEntriesSpy).toHaveBeenCalledWith('user_123', 'valid_token');
-      expect(fetchConvsSpy).toHaveBeenCalledWith('user_123', 'valid_token');
+      expect(fetchEntriesSpy).toHaveBeenCalledWith('user_123');
+      expect(fetchConvsSpy).toHaveBeenCalledWith('user_123');
     });
   });
 
@@ -382,7 +382,7 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(res.status).toBe(200);
       expect(data.status).toBe('success');
       expect(data.insight.id).toBe('ins_1');
-      expect(persistenceService.fetchLatestPatternShiftInsight).toHaveBeenCalledWith('user_123', 'valid_token');
+      expect(persistenceService.fetchLatestPatternShiftInsight).toHaveBeenCalledWith('user_123');
     });
 
     it('returns null insight gracefully when no previous insights exist', async () => {
@@ -399,7 +399,7 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(res.status).toBe(200);
       expect(data.status).toBe('success');
       expect(data.insight).toBeNull();
-      expect(persistenceService.fetchLatestPatternShiftInsight).toHaveBeenCalledWith('user_123', 'valid_token');
+      expect(persistenceService.fetchLatestPatternShiftInsight).toHaveBeenCalledWith('user_123');
     });
   });
 

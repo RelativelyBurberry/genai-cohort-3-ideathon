@@ -6117,6 +6117,22 @@ textarea.input,
   color: var(--color-danger);
 }
 
+/* Phase 10 Remediation: Subtle Preview Persistence Notice */
+/* Non-alarming, informational only. Used when an insight was generated
+   successfully but could not be persisted in this preview runtime. */
+.patternshift-persistence-notice {
+  padding: 0.875rem 1rem;
+  background-color: rgba(100, 116, 139, 0.06);
+  border: 1px solid rgba(100, 116, 139, 0.18);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-muted-foreground);
+}
+
 /* Insufficient Data */
 .patternshift-insufficient {
   padding: 3rem 2rem;
