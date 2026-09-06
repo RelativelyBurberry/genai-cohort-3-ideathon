@@ -9,6 +9,7 @@ import { SecuritySection } from './settings/SecuritySection';
 import { DemoWorkspaceCard } from './settings/DemoWorkspaceCard';
 import { NotificationSettingsCard } from './settings/NotificationSettingsCard';
 import { NotificationChannelsCard } from './settings/NotificationChannelsCard';
+import { EncryptedBackupCard } from './settings/EncryptedBackupCard';
 
 /**
  * SettingsView - Calm, editorial account & preferences area.
@@ -21,7 +22,7 @@ import { NotificationChannelsCard } from './settings/NotificationChannelsCard';
  *   5. Privacy & Data      - honest, non-exaggerated privacy explanation
  *   6. Security            - plain-language architectural safeguards
  *   7. Appearance          - honest statement; no fake preference controls
- *   8. Data portability    - informational only, no dead export button
+ *   8. Data & privacy      - Phase 19 zero-knowledge encrypted backup export
  *   9. Account Actions     - sign-out / leave-preview via existing auth flow
  *
  * The component owns no authentication, storage, or service logic. Sign-out
@@ -144,17 +145,18 @@ export const SettingsView: React.FC = () => {
           </div>
         </section>
 
-        {/* Data portability — informational only, no dead export button */}
-        <section className="settings-section" aria-labelledby="settings-portability-heading">
-          <h2 id="settings-portability-heading" className="settings-section-heading">
-            Data portability
+        {/* Data & Privacy — Phase 19 encrypted backup export */}
+        <section
+          className="settings-section"
+          aria-labelledby="settings-encrypted-backup-heading"
+        >
+          <h2
+            id="settings-encrypted-backup-heading"
+            className="settings-section-heading"
+          >
+            Data &amp; privacy
           </h2>
-          <div className="settings-card settings-portability-card">
-            <p className="settings-card-copy">
-              We're designing thoughtful ways to help you understand and
-              manage your personal reflection data.
-            </p>
-          </div>
+          <EncryptedBackupCard />
         </section>
 
         {/* Account Actions */}
