@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, MessageSquare, CheckCircle2, Clock, Trash2, Sparkles, Loader2, ChevronLeft } from 'lucide-react';
+import { Plus, MessageSquare, CheckCircle2, Clock, Trash2, Sparkles, Loader2, ChevronLeft, X, Check } from 'lucide-react';
 import type { Conversation } from '../../types/reflection';
 
 interface ConversationListProps {
@@ -19,17 +19,26 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   onDeleteConversation,
   loading = false,
 }) => {
+  // confirmingDeleteId: when set, the conversation with this id shows an
+  // inline in-app confirmation UI instead of the normal card content.
+  // This replaces the native browser confirm dialog, which is suppressed
+  // in the AI Studio iframe (no allow-modals).
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     console.log(`[DIAG_DELETE_STAGE] stage: delete_button_clicked | conversationId: ${id}`);
-    if (!window.confirm('Delete this reflection conversation and its messages? This action cannot be undone.')) {
-      console.log(`[DIAG_DELETE_STAGE] stage: delete_confirmation_cancelled | conversationId: ${id}`);
-      return;
-    }
+    // Enter inline confirmation state — no browser-native dialog.
+    setConfirmingDeleteId(id);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
     console.log(`[DIAG_DELETE_STAGE] stage: delete_confirmation_accepted | conversationId: ${id}`);
+    setConfirmingDeleteId(null);
 
     try {
       setDeleteError(null);
@@ -43,8 +52,97 @@ export const ConversationList: React.FC<ConversationListProps> = ({
     }
   };
 
+  const handleCancelDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    console.log(`[DIAG_DELETE_STAGE] stage: delete_confirmation_cancelled | conversationId: ${id}`);
+    setConfirmingDeleteId(null);
+  };
+
   const activeConversations = conversations.filter((c) => c.status === 'active');
   const completedConversations = conversations.filter((c) => c.status === 'completed');
+
+  /**
+   * Renders a single conversation card. When confirmingDeleteId matches,
+   * an inline confirmation row replaces the delete button.
+   */
+  const renderConversationCard = (conv: Conversation) => {
+    const isSelected = conv.id === activeConversationId;
+    const isConfirming = confirmingDeleteId === conv.id;
+    const isDeleting = deletingId === conv.id;
+
+    return (
+      <div
+        key={conv.id}
+        id={`conversation-item-${conv.id}`}
+        onClick={() => !isConfirming && !isDeleting && onSelectConversation(conv.id)}
+        className={`reflection-conversation-card ${isSelected ? 'active' : ''}`}
+        aria-label={`Reflection: ${conv.title}`}
+      >
+        <div className="reflection-conversation-card-content">
+          {isConfirming ? (
+            <div className="reflection-conversation-confirm-row">
+              <span className="reflection-conversation-confirm-text">Delete?</span>
+              <button
+                type="button"
+                onClick={(e) => handleConfirmDelete(e, conv.id)}
+                disabled={isDeleting}
+                className="reflection-conversation-confirm-btn"
+                aria-label={`Confirm delete reflection ${conv.title}`}
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+                <span>Delete</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleCancelDelete(e, conv.id)}
+                disabled={isDeleting}
+                className="reflection-conversation-cancel-btn"
+                aria-label={`Cancel delete reflection ${conv.title}`}
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Cancel</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="reflection-conversation-card-header">
+                <span className={`reflection-conversation-status-dot ${conv.status}`} />
+                <h4 className="reflection-conversation-card-title">{conv.title}</h4>
+              </div>
+              {conv.status === 'completed' && conv.summary ? (
+                <p className="reflection-conversation-card-summary">{conv.summary}</p>
+              ) : (
+                <p className="reflection-conversation-card-meta">
+                  {conv.status === 'active' ? 'In progress · Tap to continue' : 'Completed session'}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
+        {!isConfirming && (
+          <button
+            type="button"
+            onClick={(e) => handleDeleteClick(e, conv.id)}
+            disabled={isDeleting}
+            title="Delete reflection"
+            aria-label={`Delete reflection ${conv.title}`}
+            className="reflection-conversation-delete-btn"
+          >
+            {isDeleting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div id="conversation-list-container" className="reflection-archive flex flex-col h-full overflow-hidden">
@@ -111,39 +209,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   <Clock className="w-3.5 h-3.5 text-amber-500" />
                   <span>Active Sessions ({activeConversations.length})</span>
                 </div>
-                {activeConversations.map((conv) => {
-                  const isSelected = conv.id === activeConversationId;
-                  return (
-                    <div
-                      key={conv.id}
-                      id={`conversation-item-${conv.id}`}
-                      onClick={() => onSelectConversation(conv.id)}
-                      className={`reflection-conversation-card ${isSelected ? 'active' : ''}`}
-                    >
-                      <div className="reflection-conversation-card-content">
-                        <div className="reflection-conversation-card-header">
-                          <span className="reflection-conversation-status-dot active" />
-                          <h4 className="reflection-conversation-card-title">{conv.title}</h4>
-                        </div>
-                        <p className="reflection-conversation-card-meta">In progress · Tap to continue</p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => handleDelete(e, conv.id)}
-                        disabled={deletingId === conv.id}
-                        title="Delete reflection"
-                        className="reflection-conversation-delete-btn"
-                      >
-                        {deletingId === conv.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
+                {activeConversations.map(renderConversationCard)}
               </div>
             )}
 
@@ -154,43 +220,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Completed & Summarized ({completedConversations.length})</span>
                 </div>
-                {completedConversations.map((conv) => {
-                  const isSelected = conv.id === activeConversationId;
-                  return (
-                    <div
-                      key={conv.id}
-                      id={`conversation-item-${conv.id}`}
-                      onClick={() => onSelectConversation(conv.id)}
-                      className={`reflection-conversation-card ${isSelected ? 'active' : ''}`}
-                    >
-                      <div className="reflection-conversation-card-content">
-                        <div className="reflection-conversation-card-header">
-                          <span className="reflection-conversation-status-dot completed" />
-                          <h4 className="reflection-conversation-card-title">{conv.title}</h4>
-                        </div>
-                        {conv.summary ? (
-                          <p className="reflection-conversation-card-summary">{conv.summary}</p>
-                        ) : (
-                          <p className="reflection-conversation-card-meta">Completed session</p>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => handleDelete(e, conv.id)}
-                        disabled={deletingId === conv.id}
-                        title="Delete reflection"
-                        className="reflection-conversation-delete-btn"
-                      >
-                        {deletingId === conv.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
+                {completedConversations.map(renderConversationCard)}
               </div>
             )}
           </>

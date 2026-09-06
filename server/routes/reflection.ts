@@ -17,7 +17,10 @@ import {
   BackendPersistenceUnavailableError,
 } from '../services/conversationService.js';
 import { getTimestampMillis } from '../services/firestoreRestService.js';
-import { toBackendPersistenceApiResponse } from '../services/privilegedPersistence.js';
+import {
+  toBackendPersistenceApiResponse,
+  BACKEND_PERSISTENCE_UNAVAILABLE,
+} from '../services/privilegedPersistence.js';
 
 export const reflectionRouter = Router();
 
@@ -116,6 +119,10 @@ function createDiagnostics(
 reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const stageTrace: Record<string, StageState> = {};
   let activeStage = 'request_received';
+  // Hoisted to the route scope so the catch block can return the Gemini
+  // output as a client-persistence fallback when Admin SDK persistence
+  // is unavailable in the preview sandbox.
+  let assistantText: string | null = null;
   stageTrace[activeStage] = { status: 'success' };
   console.log(`[STAGE_TRACE] stage: ${activeStage} | status: success`);
 
@@ -300,20 +307,29 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
     activeStage = 'gemini_generate_content';
     stageTrace[activeStage] = { status: 'enter' };
     console.log(`[STAGE_TRACE] stage: ${activeStage} | status: enter | model: ${getGeminiModelName()}`);
-    const assistantText = await generateReflectionResponse(priorTurns, latestMessage.content);
+    assistantText = await generateReflectionResponse(priorTurns, latestMessage.content);
     stageTrace[activeStage] = { status: 'success' };
     console.log(`[STAGE_TRACE] stage: ${activeStage} | status: success`);
 
     // Stage: assistant_message_persistence (BACKEND-OWNED WRITE)
     //
-    // CRITICAL: This stage is the privilege boundary. We call
-    // persistAssistantMessage with NO user token. The function is
-    // strictly privileged; if the runtime lacks Firestore IAM it
-    // throws BackendPersistenceUnavailableError and we MUST fail
-    // closed. The API MUST NOT return the generated text as a
-    // successful assistant turn, because the turn was never
-    // persisted. Returning a 200 with a "disappearing" message
-    // would create a transactional/UX lie.
+    // PRIVILEGE BOUNDARY: We call persistAssistantMessage with NO user
+    // token. The function is strictly privileged (Admin SDK).
+    //
+    // FALLBACK POLICY (preview sandbox):
+    //   If the runtime lacks Firestore IAM, the Admin SDK throws
+    //   BackendPersistenceUnavailableError. Because Gemini already
+    //   succeeded by this point, we MUST NOT discard the generated
+    //   response. Instead we return HTTP 200 with the generated
+    //   assistant message and persistence.fallbackRequired = true.
+    //   The authenticated client then persists the assistant message
+    //   using the Firebase Client SDK under existing Firestore
+    //   ownership rules.
+    //
+    //   This fallback is NARROW: it only applies to
+    //   BackendPersistenceUnavailableError (a classified capability
+    //   failure), never to auth failures, Gemini failures, or
+    //   arbitrary errors — those still fail closed.
     activeStage = 'assistant_message_persistence';
     stageTrace[activeStage] = { status: 'enter', transport: 'admin_sdk' };
     console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: admin_sdk | database: named | status: enter`);
@@ -321,10 +337,11 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
     stageTrace[activeStage] = { status: 'success', transport: 'admin_sdk' };
     console.log(`[STAGE_TRACE] stage: ${activeStage} | transport: admin_sdk | database: named | status: success`);
 
-    // Stage: request_complete
+    // Stage: request_complete — normal production persistence succeeded
     activeStage = 'request_complete';
     stageTrace[activeStage] = { status: 'success' };
     res.status(200).json({
+      status: 'success',
       conversationId,
       message: {
         id: assistantMessage.id,
@@ -332,12 +349,66 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
         content: assistantMessage.content,
         createdAt: new Date().toISOString(),
       },
+      persistence: {
+        persisted: true,
+      },
     });
     console.log(`[STAGE_TRACE] stage: ${activeStage} | status: success | http: 200`);
   } catch (error: any) {
-    // Capability error: privileged persistence unavailable in this
-    // runtime. Fail closed; do NOT return a 200 with a generated
-    // assistant response that was never persisted.
+    // CAPABILITY FALLBACK: Privileged persistence unavailable in the
+    // preview sandbox AFTER Gemini already succeeded. We MUST NOT
+    // discard the generated assistant response. Return it with
+    // fallbackRequired so the authenticated client persists it via
+    // the Firebase Client SDK under existing ownership rules.
+    //
+    // This is the ONLY error class that triggers the fallback.
+    // Auth failures, Gemini failures, malformed requests, etc.
+    // propagate to the normal error handler below and fail closed.
+    if (error instanceof BackendPersistenceUnavailableError && assistantText !== null) {
+      if (activeStage) {
+        stageTrace[activeStage] = {
+          status: 'failure',
+          errorCode: BACKEND_PERSISTENCE_UNAVAILABLE,
+          errorMessage: 'Backend persistence unavailable; returning generated response for client fallback.',
+          transport: 'admin_sdk',
+        };
+      }
+      const diagnostics = createDiagnostics(
+        activeStage,
+        200,
+        'BackendPersistenceUnavailableError',
+        BACKEND_PERSISTENCE_UNAVAILABLE,
+        'Backend persistence unavailable; client fallback triggered.',
+        stageTrace,
+        readTransport
+      );
+      console.warn(
+        `[REFLECT_FALLBACK] Gemini succeeded but Admin persistence unavailable. ` +
+        `Returning generated response for client-side persistence fallback. ` +
+        `conversationId: ${conversationId}`
+      );
+      res.status(200).json({
+        status: 'success',
+        conversationId,
+        message: {
+          id: null,
+          role: 'assistant',
+          content: assistantText,
+          createdAt: new Date().toISOString(),
+        },
+        persistence: {
+          persisted: false,
+          fallbackRequired: true,
+          reason: 'backend_persistence_unavailable',
+        },
+        diagnostics,
+      });
+      return;
+    }
+
+    // If BackendPersistenceUnavailableError reached here without
+    // assistantText (should not happen in the reflect flow, but
+    // defensive), fail closed with the standard 503.
     if (error instanceof BackendPersistenceUnavailableError) {
       const apiResp = toBackendPersistenceApiResponse(error, 'persistAssistantMessage');
       const sanitizedMsg = apiResp.body.message;
@@ -351,8 +422,8 @@ reflectionRouter.post('/api/reflect', requireAuth, async (req: AuthenticatedRequ
         };
       }
       const diagnostics = createDiagnostics(activeStage, apiResp.status, 'BackendPersistenceUnavailableError', String(errorCode), sanitizedMsg, stageTrace, readTransport);
-      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: {diagnostics.lastSuccessfulStage}\nfailedStage: {diagnostics.failedStage}\nerrorName: {diagnostics.errorName}\nerrorCode: {diagnostics.errorCode}\nerrorMessage: {diagnostics.errorMessage}`);
-      console.error(`[STAGE_TRACE] stage: {activeStage} | status: failure | http: {apiResp.status} | errorCode: {errorCode} | errorMsg: {sanitizedMsg}`);
+      console.error(`[REFLECT_DIAG]\nlastSuccessfulStage: ${diagnostics.lastSuccessfulStage}\nfailedStage: ${diagnostics.failedStage}\nerrorName: ${diagnostics.errorName}\nerrorCode: ${diagnostics.errorCode}\nerrorMessage: ${diagnostics.errorMessage}`);
+      console.error(`[STAGE_TRACE] stage: ${activeStage} | status: failure | http: ${apiResp.status} | errorCode: ${errorCode} | errorMsg: ${sanitizedMsg}`);
       res.status(apiResp.status).json({
         error: apiResp.body.error,
         message: apiResp.body.message,

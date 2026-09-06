@@ -430,7 +430,12 @@ export async function completeAndSummarizeConversationRest(
  * Deletes a conversation and all its subcollection messages using the user's token via REST API.
  * Performs cascade deletion: retrieves all messages, deletes each message document via REST,
  * then deletes the parent conversation document via REST.
- * Explicitly performs a post-deletion GET check to verify document non-existence (404).
+ *
+ * NOTE: An immediate post-deletion GET verification was removed because Firestore
+ * propagation timing can cause a false negative (the document may still be
+ * briefly visible immediately after deletion). The DELETE request succeeding
+ * (HTTP 200) or returning 404 (already gone) is treated as authoritative. The
+ * client's real-time listener confirms removal in the UI.
  */
 export async function deleteConversationRest(
   token: string,
@@ -441,8 +446,6 @@ export async function deleteConversationRest(
   messagesDeleted: number;
   parentDeleteStatus: number;
   parentDeleteBody: string;
-  postDeleteCheckStatus: number;
-  verifiedDeleted: boolean;
 }> {
   const baseUrl = getBaseUrl();
 
@@ -482,23 +485,12 @@ export async function deleteConversationRest(
   const parentBody = await parentRes.text().catch(() => '');
   console.log(`[DIAG_DELETE_STAGE] stage: delete_parent_conversation | conversationId: ${conversationId} | httpStatus: ${parentRes.status} | body: ${parentBody.slice(0, 200)}`);
 
+  // DELETE returning 200 (deleted) or 404 (already gone) is authoritative.
+  // An immediate GET verification was removed because Firestore propagation
+  // timing can cause a false negative, leading to spurious failures after an
+  // otherwise successful deletion.
   if (!parentRes.ok && parentRes.status !== 404) {
     throw new Error(`Firestore REST parent deletion error: HTTP ${parentRes.status} ${parentBody}`);
-  }
-
-  // 4. Verification step: Perform explicit REST GET for parent conversation to confirm non-existence
-  const checkRes = await fetch(convUrl, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  const checkBody = await checkRes.text().catch(() => '');
-  const verifiedDeleted = checkRes.status === 404;
-  console.log(`[DIAG_DELETE_STAGE] stage: delete_firestore_verified | conversationId: ${conversationId} | httpStatus: ${checkRes.status} | verifiedDeleted: ${verifiedDeleted} | body: ${checkBody.slice(0, 150)}`);
-
-  if (!verifiedDeleted) {
-    throw new Error(`Verification failed: Conversation document ${conversationId} still exists in Firestore after deletion attempt (HTTP ${checkRes.status}).`);
   }
 
   return {
@@ -506,8 +498,6 @@ export async function deleteConversationRest(
     messagesDeleted,
     parentDeleteStatus: parentRes.status,
     parentDeleteBody: parentBody,
-    postDeleteCheckStatus: checkRes.status,
-    verifiedDeleted,
   };
 }
 

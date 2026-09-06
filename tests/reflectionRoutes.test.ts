@@ -6,6 +6,7 @@ import * as adminHelper from '../server/firebaseAdmin.js';
 import * as conversationService from '../server/services/conversationService.js';
 import * as rateLimiter from '../server/services/rateLimiter.js';
 import * as geminiService from '../server/services/geminiService.js';
+import { BackendPersistenceUnavailableError } from '../server/services/conversationService.js';
 
 describe('Milestone 3 Reflection & Summarization Routes', () => {
   let app: express.Express;
@@ -290,9 +291,12 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
 
       const data = await res.json();
       expect(res.status).toBe(200);
+      expect(data.status).toBe('success');
       expect(data.conversationId).toBe('conv_1');
       expect(data.message.role).toBe('assistant');
       expect(data.message.content).toBe('What feels like the heaviest part of tomorrow for you?');
+      // Normal production: backend persisted the assistant message.
+      expect(data.persistence).toEqual({ persisted: true });
 
       // SECURITY: persistAssistantMessage MUST ignore the user token parameter
       // for backend-owned writes. The function signature accepts a token for
@@ -304,6 +308,202 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
         'What feels like the heaviest part of tomorrow for you?',
         undefined
       );
+    });
+
+    it('returns generated response with fallback metadata when backend persistence is unavailable (preview sandbox)', async () => {
+      vi.spyOn(conversationService, 'getConversation').mockResolvedValue({
+        id: 'conv_1',
+        title: 'Active reflection',
+        summary: null,
+        status: 'active',
+        createdAt: null,
+        updatedAt: null,
+        summaryUpdatedAt: null,
+      });
+
+      vi.spyOn(conversationService, 'getAuthoritativeMessages').mockResolvedValue([
+        {
+          id: 'msg_1',
+          role: 'user',
+          content: 'I feel anxious about tomorrow.',
+          createdAt: null,
+        },
+      ]);
+
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        count: 1,
+        limit: 10,
+        remaining: 9,
+        resetTimeMs: Date.now() + 60000,
+        retryAfterSeconds: 0,
+      });
+
+      vi.spyOn(geminiService, 'generateReflectionResponse').mockResolvedValue(
+        'What feels like the heaviest part of tomorrow for you?'
+      );
+
+      // Backend Admin SDK persistence is unavailable in the preview sandbox.
+      vi.spyOn(conversationService, 'persistAssistantMessage').mockRejectedValue(
+        new BackendPersistenceUnavailableError('persistAssistantMessage')
+      );
+
+      const res = await fetch(`${baseUrl}/api/reflect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer valid_token',
+        },
+        body: JSON.stringify({ conversationId: 'conv_1' }),
+      });
+
+      const data = await res.json();
+      // CRITICAL: The response is 200 — Gemini succeeded and the
+      // generated response MUST NOT be discarded.
+      expect(res.status).toBe(200);
+      expect(data.status).toBe('success');
+      expect(data.conversationId).toBe('conv_1');
+      expect(data.message.role).toBe('assistant');
+      expect(data.message.content).toBe('What feels like the heaviest part of tomorrow for you?');
+      // Fallback metadata signals the client must persist via Client SDK.
+      expect(data.persistence.persisted).toBe(false);
+      expect(data.persistence.fallbackRequired).toBe(true);
+      expect(data.persistence.reason).toBe('backend_persistence_unavailable');
+
+      // Gemini MUST have been called.
+      expect(geminiService.generateReflectionResponse).toHaveBeenCalled();
+    });
+
+    it('does NOT fallback for arbitrary errors (fail-closed for non-capability errors)', async () => {
+      vi.spyOn(conversationService, 'getConversation').mockResolvedValue({
+        id: 'conv_1',
+        title: 'Active reflection',
+        summary: null,
+        status: 'active',
+        createdAt: null,
+        updatedAt: null,
+        summaryUpdatedAt: null,
+      });
+
+      vi.spyOn(conversationService, 'getAuthoritativeMessages').mockResolvedValue([
+        {
+          id: 'msg_1',
+          role: 'user',
+          content: 'I feel anxious about tomorrow.',
+          createdAt: null,
+        },
+      ]);
+
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        count: 1,
+        limit: 10,
+        remaining: 9,
+        resetTimeMs: Date.now() + 60000,
+        retryAfterSeconds: 0,
+      });
+
+      vi.spyOn(geminiService, 'generateReflectionResponse').mockResolvedValue(
+        'What feels like the heaviest part of tomorrow for you?'
+      );
+
+      // An arbitrary (non-capability) error during persistence.
+      vi.spyOn(conversationService, 'persistAssistantMessage').mockRejectedValue(
+        new Error('Unexpected Firestore write error')
+      );
+
+      const res = await fetch(`${baseUrl}/api/reflect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer valid_token',
+        },
+        body: JSON.stringify({ conversationId: 'conv_1' }),
+      });
+
+      const data = await res.json();
+      // CRITICAL: Non-capability errors MUST fail closed (500).
+      // The generated response MUST NOT be returned.
+      expect(res.status).toBe(500);
+      expect(data.error).toBeDefined();
+      expect(data.persistence).toBeUndefined();
+      // Error responses do not have the success contract fields.
+      expect(data.status).toBeUndefined();
+    });
+
+    it('does NOT fallback when Gemini fails (no generated response to return)', async () => {
+      vi.spyOn(conversationService, 'getConversation').mockResolvedValue({
+        id: 'conv_1',
+        title: 'Active reflection',
+        summary: null,
+        status: 'active',
+        createdAt: null,
+        updatedAt: null,
+        summaryUpdatedAt: null,
+      });
+
+      vi.spyOn(conversationService, 'getAuthoritativeMessages').mockResolvedValue([
+        {
+          id: 'msg_1',
+          role: 'user',
+          content: 'I feel anxious about tomorrow.',
+          createdAt: null,
+        },
+      ]);
+
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        count: 1,
+        limit: 10,
+        remaining: 9,
+        resetTimeMs: Date.now() + 60000,
+        retryAfterSeconds: 0,
+      });
+
+      // Gemini itself fails — no assistant text was generated.
+      vi.spyOn(geminiService, 'generateReflectionResponse').mockRejectedValue(
+        new Error('Gemini API error')
+      );
+
+      const persistSpy = vi.spyOn(conversationService, 'persistAssistantMessage');
+
+      const res = await fetch(`${baseUrl}/api/reflect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer valid_token',
+        },
+        body: JSON.stringify({ conversationId: 'conv_1' }),
+      });
+
+      const data = await res.json();
+      // Gemini failure MUST fail closed. No fallback, no 200.
+      expect(res.status).toBe(500);
+      expect(data.error).toBeDefined();
+      expect(data.persistence).toBeUndefined();
+      // Error responses do not have the success contract fields.
+      expect(data.status).toBeUndefined();
+      // Persistence must never have been reached.
+      expect(persistSpy).not.toHaveBeenCalled();
+    });
+
+    it('does NOT fallback on authentication failure', async () => {
+      const res = await fetch(`${baseUrl}/api/reflect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer bad_token',
+        },
+        body: JSON.stringify({ conversationId: 'conv_1' }),
+      });
+
+      const data = await res.json();
+      // Auth failure MUST fail closed with 401. No fallback.
+      expect(res.status).toBe(401);
+      expect(data.error).toBe('auth/invalid-token');
+      expect(data.persistence).toBeUndefined();
+      // Error responses do not have the success contract fields.
+      expect(data.status).toBeUndefined();
     });
   });
 

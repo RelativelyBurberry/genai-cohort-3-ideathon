@@ -7,8 +7,6 @@ import {
   createConversation,
   deleteConversation,
 } from '../../services/reflectionService';
-import { deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase';
 import { ConversationList } from './ConversationList';
 import { ConversationView } from './ConversationView';
 import { Sparkles, Plus } from 'lucide-react';
@@ -130,6 +128,7 @@ export const GuidedReflectionDashboard: React.FC = () => {
         }
       } catch (err) {
         console.error('[GuidedReflection] Failed to delete demo conversation:', err);
+        throw err;
       }
       return;
     }
@@ -138,17 +137,18 @@ export const GuidedReflectionDashboard: React.FC = () => {
       console.log(`[DIAG_DELETE_STAGE] stage: delete_token_acquired | conversationId: ${id}`);
       const token = await getIdToken(false);
       if (!token) throw new Error('Authentication required.');
+
+      // Authenticated DELETE request to backend, which performs the
+      // cascade deletion (messages + conversation doc) via the
+      // user-token REST path (owner-authorized). The brittle
+      // immediate post-delete GET verification has been removed.
       const res = await deleteConversation(token, id);
       console.log(`[DIAG_DELETE_STAGE] stage: delete_api_response_received | conversationId: ${id} | res:`, res);
 
-      // Clean up client Firestore SDK local cache
-      try {
-        await deleteDoc(doc(db, 'users', user.uid, 'conversations', id));
-      } catch (_cacheErr) {
-        // Document was already removed on server
-      }
-
-      // Synchronize React state immediately upon confirmed Firestore deletion
+      // Synchronize React state immediately upon confirmed deletion.
+      // The real-time subscription will also confirm removal, but we
+      // update optimistically here so the UI reflects the delete
+      // without waiting for the next snapshot tick.
       setConversations((prev) => {
         const remaining = prev.filter((c) => c.id !== id);
         console.log(

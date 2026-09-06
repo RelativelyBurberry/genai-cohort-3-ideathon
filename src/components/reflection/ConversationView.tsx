@@ -122,7 +122,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       }
 
       // Invokes ONLY POST /api/reflect - strictly DOES NOT call addUserMessage
-      const response = await requestAssistantReflection(token, conversation.id);
+      const response = await requestAssistantReflection(token, conversation.id, uid);
 
       if (response.crisisSupportRequired) {
         setCrisisTriggered(true);
@@ -192,8 +192,10 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       }
 
       // 3. Request assistant reflection from backend
-      // Backend validates token, runs crisis screener, rate limiter, invokes Gemini, and persists assistant message
-      const response = await requestAssistantReflection(token, conversation.id);
+      // Backend validates token, runs crisis screener, rate limiter, invokes Gemini, and persists assistant message.
+      // uid is passed so the client can persist the assistant message via Client SDK when
+      // the backend signals a preview-sandbox persistence fallback.
+      const response = await requestAssistantReflection(token, conversation.id, uid);
 
       if (response.crisisSupportRequired) {
         setCrisisTriggered(true);

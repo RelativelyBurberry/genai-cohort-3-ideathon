@@ -17,14 +17,30 @@ export interface ReflectionMessage {
   createdAt: Timestamp | null;
 }
 
+/**
+ * Persistence metadata returned by POST /api/reflect.
+ *
+ * - persisted: true  -> backend persisted the assistant message (production).
+ * - persisted: false, fallbackRequired: true -> backend persistence was
+ *   unavailable (preview sandbox); the generated response is still returned
+ *   and the authenticated client must persist it via the Firebase Client SDK.
+ */
+export interface ReflectPersistence {
+  persisted: boolean;
+  fallbackRequired?: boolean;
+  reason?: string;
+}
+
 export interface ReflectApiResponse {
+  status?: 'success';
   conversationId: string;
   message?: {
-    id: string;
+    id: string | null;
     role: 'assistant';
     content: string;
     createdAt: string;
   };
+  persistence?: ReflectPersistence;
   crisisSupportRequired?: boolean;
   assistantMessage?: null;
   error?: string;

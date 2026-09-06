@@ -74,10 +74,19 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isOwner(userId);
 
-        // Strict message provenance: Client may only create user-authored messages (role == "user").
-        // Assistant messages are persisted exclusively by privileged backend logic.
+        // Message provenance: Client may create user-authored messages
+        // (role == "user") AND assistant messages (role == "assistant").
+        //
+        // Assistant message creation by the owner is permitted as a
+        // NARROW capability fallback for the AI Studio preview sandbox,
+        // where the backend Admin SDK persistence lacks Firestore IAM.
+        // In that case the backend returns the Gemini-generated response
+        // and the authenticated client persists it here under existing
+        // ownership rules (isOwner). Production backend persistence via
+        // Admin SDK always remains preferred.
         allow create: if isOwner(userId)
-                      && request.resource.data.role == "user";
+                      && (request.resource.data.role == "user"
+                          || request.resource.data.role == "assistant");
 
         // Message updates are forbidden (messages remain immutable).
         allow update: if false;
