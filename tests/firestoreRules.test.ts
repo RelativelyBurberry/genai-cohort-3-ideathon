@@ -50,13 +50,26 @@ describe('Firestore Security Rules Static Analysis & Invariant Verification', ()
     expect(rulesContent).toContain('allow delete: if isOwner(userId);');
   });
 
-  it('enforces field-level protection on conversation updates prohibiting status, summary, and summaryUpdatedAt tampering', () => {
+  it('enforces field-level protection on conversation updates prohibiting status, summary, and summaryUpdatedAt tampering, with narrow active→completed fallback', () => {
     expect(rulesContent).toContain('match /users/{userId}/conversations/{conversationId}');
     expect(rulesContent).toContain('allow update: if isOwner(userId)');
-    expect(rulesContent).toContain('!request.resource.data.diff(resource.data).affectedKeys().hasAny');
+    // Normal metadata updates must not touch backend-owned lifecycle fields.
+    expect(rulesContent).toMatch(/!request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\s*\.hasAny/);
     expect(rulesContent).toContain("'status'");
     expect(rulesContent).toContain("'summary'");
     expect(rulesContent).toContain("'summaryUpdatedAt'");
+
+    // Narrow AI Studio persistence fallback: active → completed only.
+    expect(rulesContent).toContain('resource.data.status == "active"');
+    expect(rulesContent).toContain('request.resource.data.status == "completed"');
+    expect(rulesContent).toContain('request.resource.data.summary is string');
+    expect(rulesContent).toContain('request.resource.data.summary.size() >= 10');
+    expect(rulesContent).toContain('request.resource.data.summary.size() <= 10000');
+    expect(rulesContent).toContain('request.resource.data.summaryUpdatedAt is timestamp');
+    // Fallback must constrain which fields may change.
+    expect(rulesContent).toContain(".hasOnly([");
+    expect(rulesContent).toContain("'status'");
+    expect(rulesContent).toContain("'updatedAt'");
   });
 
   it('locks backend-only rate limit documents: allow read, write: if false', () => {

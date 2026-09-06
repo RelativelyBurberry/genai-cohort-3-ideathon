@@ -10,9 +10,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 // Mock firebase/firestore before importing the service.
-// addDoc is conditionally controlled via variables below so tests can
-// simulate both success and failure of the Client SDK persistence.
+// addDoc / updateDoc are conditionally controlled via variables below
+// so tests can simulate both success and failure of the Client SDK
+// persistence. Call-tracking variables let tests assert invocation
+// counts without relying on vi.spyOn over a mocked module.
 let addDocShouldFail = false;
+let updateDocShouldFail = false;
+let updateDocCallCount = 0;
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
@@ -24,7 +28,12 @@ vi.mock('firebase/firestore', () => ({
     return { id: 'client_persisted_id' };
   }),
   deleteDoc: vi.fn(),
-  updateDoc: vi.fn(),
+  updateDoc: vi.fn(async (_ref: any, _data: any) => {
+    updateDocCallCount++;
+    if (updateDocShouldFail) {
+      throw new Error('Firestore update denied');
+    }
+  }),
   getDocs: vi.fn(),
   query: vi.fn(),
   orderBy: vi.fn(),
@@ -40,6 +49,7 @@ vi.mock('../src/firebase', () => ({
 import {
   parseReflectionResponse,
   requestAssistantReflection,
+  requestSummarize,
 } from '../src/services/reflectionService';
 
 /**
@@ -151,6 +161,8 @@ describe('requestAssistantReflection — client fallback persistence', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     addDocShouldFail = false;
+    updateDocShouldFail = false;
+    updateDocCallCount = 0;
   });
 
   it('returns the persisted message on normal backend persistence (no fallback)', async () => {
@@ -288,5 +300,102 @@ describe('requestAssistantReflection — client fallback persistence', () => {
 
     expect(result.crisisSupportRequired).toBe(true);
     expect(result.message).toBeUndefined();
+  });
+});
+
+describe('requestSummarize — client fallback completion', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    addDocShouldFail = false;
+    updateDocShouldFail = false;
+    updateDocCallCount = 0;
+  });
+
+  it('returns the summary on normal backend persistence (no fallback)', async () => {
+    const responseBody = {
+      status: 'success',
+      conversationId: 'conv_1',
+      summary: 'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.',
+      persistence: { persisted: true },
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      makeResponse(JSON.stringify(responseBody), { status: 200, contentType: 'application/json' })
+    );
+
+    const result = await requestSummarize('token', 'conv_1', 'user_123');
+
+    expect(result.status).toBe('success');
+    expect(result.conversationId).toBe('conv_1');
+    expect(result.summary).toContain('Key Themes');
+    expect(result.persistence?.persisted).toBe(true);
+    expect(result.persistence?.fallbackRequired).toBeUndefined();
+    // Client SDK completion MUST NOT have been called.
+    expect(updateDocCallCount).toBe(0);
+  });
+
+  it('completes conversation via Client SDK when backend signals fallbackRequired', async () => {
+    const responseBody = {
+      status: 'success',
+      conversationId: 'conv_1',
+      summary: 'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.',
+      persistence: {
+        persisted: false,
+        fallbackRequired: true,
+        reason: 'backend_persistence_unavailable',
+      },
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      makeResponse(JSON.stringify(responseBody), { status: 200, contentType: 'application/json' })
+    );
+
+    // updateDoc succeeds (default), so the fallback completes the
+    // conversation and normalizes the response.
+    const result = await requestSummarize('token', 'conv_1', 'user_123');
+
+    expect(result.conversationId).toBe('conv_1');
+    expect(result.summary).toContain('Key Themes');
+    // Client fallback persisted and normalized the response.
+    expect(result.persistence?.persisted).toBe(true);
+    expect(result.persistence?.fallbackRequired).toBe(false);
+    expect(result.persistence?.reason).toBe('client_fallback_completed');
+    // updateDoc MUST have been called once for the completion.
+    expect(updateDocCallCount).toBe(1);
+  });
+
+  it('throws when client completion fails (no fake success)', async () => {
+    const responseBody = {
+      status: 'success',
+      conversationId: 'conv_1',
+      summary: 'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.',
+      persistence: {
+        persisted: false,
+        fallbackRequired: true,
+        reason: 'backend_persistence_unavailable',
+      },
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      makeResponse(JSON.stringify(responseBody), { status: 200, contentType: 'application/json' })
+    );
+
+    // Force the Client SDK updateDoc to reject.
+    updateDocShouldFail = true;
+
+    await expect(
+      requestSummarize('token', 'conv_1', 'user_123')
+    ).rejects.toThrow();
+  });
+
+  it('surfaces a friendly error on HTML 200 response (no raw SyntaxError)', async () => {
+    const htmlBody = '<!doctype html><html><title>Starting Server...</title></html>';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      makeResponse(htmlBody, { status: 200, contentType: 'text/html' })
+    );
+
+    await expect(
+      requestSummarize('token', 'conv_1', 'user_123')
+    ).rejects.toThrow('The reflection service is temporarily unavailable. Please tap Retry.');
   });
 });

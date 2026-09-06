@@ -243,8 +243,11 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       }
 
       // Backend verifies token, reads history, calls Gemini for summary,
-      // atomically transitions status to 'completed', and sets summary
-      await requestSummarize(token, conversation.id);
+      // atomically transitions status to 'completed', and sets summary.
+      // uid is passed so the client can complete the conversation via
+      // Client SDK when the backend signals a preview-sandbox
+      // persistence fallback.
+      await requestSummarize(token, conversation.id, uid);
 
       if (onConversationUpdated) {
         onConversationUpdated();

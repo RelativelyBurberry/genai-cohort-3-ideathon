@@ -46,9 +46,24 @@ export interface ReflectApiResponse {
   error?: string;
 }
 
+/**
+ * Summarization response returned by POST /api/conversations/:id/summarize.
+ *
+ * - persistence.persisted: true  -> backend persisted the summary and
+ *   transitioned status to 'completed' (production).
+ * - persistence.persisted: false, fallbackRequired: true -> backend
+ *   persistence was unavailable (preview sandbox); the generated
+ *   summary is still returned and the authenticated client must
+ *   complete the conversation via the Firebase Client SDK.
+ */
 export interface SummarizeApiResponse {
+  status?: 'success';
   conversationId: string;
   summary: string;
-  status: 'completed';
+  persistence?: {
+    persisted: boolean;
+    fallbackRequired?: boolean;
+    reason?: string;
+  };
   error?: string;
 }

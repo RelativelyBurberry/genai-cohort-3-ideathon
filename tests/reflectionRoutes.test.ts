@@ -602,7 +602,7 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       expect(completeSpy).not.toHaveBeenCalled();
     });
 
-    it('successfully generates summary and atomically completes conversation', async () => {
+    it('successfully generates summary and completes conversation with normal Admin persistence', async () => {
       vi.spyOn(conversationService, 'getConversation').mockResolvedValue({
         id: 'conv_1',
         title: 'Active reflection',
@@ -627,9 +627,8 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
         retryAfterSeconds: 0,
       });
 
-      vi.spyOn(geminiService, 'generateConversationSummary').mockResolvedValue(
-        'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.'
-      );
+      const summaryText = 'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.';
+      vi.spyOn(geminiService, 'generateConversationSummary').mockResolvedValue(summaryText);
 
       const completeSpy = vi.spyOn(
         conversationService,
@@ -645,9 +644,12 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
 
       const data = await res.json();
       expect(res.status).toBe(200);
+      expect(data.status).toBe('success');
       expect(data.conversationId).toBe('conv_1');
-      expect(data.status).toBe('completed');
       expect(data.summary).toContain('Key Themes');
+      // Normal production: backend persisted the summary.
+      expect(data.persistence).toEqual({ persisted: true });
+
       // SECURITY: completeAndSummarizeConversation MUST ignore the user token
       // parameter for backend-owned writes. The function signature accepts a
       // token for legacy compatibility but it is explicitly ignored to enforce
@@ -655,9 +657,179 @@ describe('Milestone 3 Reflection & Summarization Routes', () => {
       expect(completeSpy).toHaveBeenCalledWith(
         'user_123',
         'conv_1',
-        'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.',
+        summaryText,
         undefined
       );
+    });
+
+    it('returns generated summary with fallback metadata when backend persistence is unavailable (preview sandbox)', async () => {
+      vi.spyOn(conversationService, 'getConversation').mockResolvedValue({
+        id: 'conv_1',
+        title: 'Active reflection',
+        summary: null,
+        status: 'active',
+        createdAt: null,
+        updatedAt: null,
+        summaryUpdatedAt: null,
+      });
+
+      vi.spyOn(conversationService, 'getAuthoritativeMessages').mockResolvedValue([
+        { id: 'm1', role: 'user', content: 'Turn 1', createdAt: null },
+        { id: 'm2', role: 'assistant', content: 'Turn 2', createdAt: null },
+      ]);
+
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        count: 2,
+        limit: 10,
+        remaining: 8,
+        resetTimeMs: Date.now() + 60000,
+        retryAfterSeconds: 0,
+      });
+
+      const summaryText = 'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.';
+      vi.spyOn(geminiService, 'generateConversationSummary').mockResolvedValue(summaryText);
+
+      // Backend Admin SDK persistence is unavailable in the preview sandbox.
+      vi.spyOn(conversationService, 'completeAndSummarizeConversation').mockRejectedValue(
+        new BackendPersistenceUnavailableError('completeAndSummarizeConversation')
+      );
+
+      const res = await fetch(`${baseUrl}/api/conversations/conv_1/summarize`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer valid_token',
+        },
+      });
+
+      const data = await res.json();
+      // CRITICAL: The response is 200 — Gemini succeeded and the
+      // generated summary MUST NOT be discarded.
+      expect(res.status).toBe(200);
+      expect(data.status).toBe('success');
+      expect(data.conversationId).toBe('conv_1');
+      expect(data.summary).toBe(summaryText);
+      // Fallback metadata signals the client must persist via Client SDK.
+      expect(data.persistence.persisted).toBe(false);
+      expect(data.persistence.fallbackRequired).toBe(true);
+      expect(data.persistence.reason).toBe('backend_persistence_unavailable');
+
+      // Gemini MUST have been called.
+      expect(geminiService.generateConversationSummary).toHaveBeenCalled();
+    });
+
+    it('does NOT fallback when Gemini fails (no generated summary to return)', async () => {
+      vi.spyOn(conversationService, 'getConversation').mockResolvedValue({
+        id: 'conv_1',
+        title: 'Active reflection',
+        summary: null,
+        status: 'active',
+        createdAt: null,
+        updatedAt: null,
+        summaryUpdatedAt: null,
+      });
+
+      vi.spyOn(conversationService, 'getAuthoritativeMessages').mockResolvedValue([
+        { id: 'm1', role: 'user', content: 'Turn 1', createdAt: null },
+        { id: 'm2', role: 'assistant', content: 'Turn 2', createdAt: null },
+      ]);
+
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        count: 2,
+        limit: 10,
+        remaining: 8,
+        resetTimeMs: Date.now() + 60000,
+        retryAfterSeconds: 0,
+      });
+
+      // Gemini itself fails — no summary was generated.
+      vi.spyOn(geminiService, 'generateConversationSummary').mockRejectedValue(
+        new Error('Gemini API error')
+      );
+
+      const completeSpy = vi.spyOn(conversationService, 'completeAndSummarizeConversation');
+
+      const res = await fetch(`${baseUrl}/api/conversations/conv_1/summarize`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer valid_token',
+        },
+      });
+
+      const data = await res.json();
+      // Gemini failure MUST fail closed. No fallback, no 200.
+      expect(res.status).toBe(500);
+      expect(data.error).toBeDefined();
+      expect(data.persistence).toBeUndefined();
+      expect(data.status).toBeUndefined();
+      // Completion must never have been reached.
+      expect(completeSpy).not.toHaveBeenCalled();
+    });
+
+    it('does NOT fallback for arbitrary persistence errors (fail-closed for non-capability errors)', async () => {
+      vi.spyOn(conversationService, 'getConversation').mockResolvedValue({
+        id: 'conv_1',
+        title: 'Active reflection',
+        summary: null,
+        status: 'active',
+        createdAt: null,
+        updatedAt: null,
+        summaryUpdatedAt: null,
+      });
+
+      vi.spyOn(conversationService, 'getAuthoritativeMessages').mockResolvedValue([
+        { id: 'm1', role: 'user', content: 'Turn 1', createdAt: null },
+        { id: 'm2', role: 'assistant', content: 'Turn 2', createdAt: null },
+      ]);
+
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        count: 2,
+        limit: 10,
+        remaining: 8,
+        resetTimeMs: Date.now() + 60000,
+        retryAfterSeconds: 0,
+      });
+
+      const summaryText = 'Key Themes: Personal Growth\nNotable Thoughts: Clarity achieved.';
+      vi.spyOn(geminiService, 'generateConversationSummary').mockResolvedValue(summaryText);
+
+      // An arbitrary (non-capability) error during persistence.
+      vi.spyOn(conversationService, 'completeAndSummarizeConversation').mockRejectedValue(
+        new Error('Unexpected Firestore write error')
+      );
+
+      const res = await fetch(`${baseUrl}/api/conversations/conv_1/summarize`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer valid_token',
+        },
+      });
+
+      const data = await res.json();
+      // CRITICAL: Non-capability errors MUST fail closed (500).
+      // The generated summary MUST NOT be returned.
+      expect(res.status).toBe(500);
+      expect(data.error).toBeDefined();
+      expect(data.persistence).toBeUndefined();
+      expect(data.status).toBeUndefined();
+    });
+
+    it('does NOT fallback on authentication failure', async () => {
+      const res = await fetch(`${baseUrl}/api/conversations/conv_1/summarize`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer bad_token',
+        },
+      });
+
+      const data = await res.json();
+      // Auth failure MUST fail closed with 401. No fallback.
+      expect(res.status).toBe(401);
+      expect(data.error).toBe('auth/invalid-token');
+      expect(data.persistence).toBeUndefined();
+      expect(data.status).toBeUndefined();
     });
   });
 });

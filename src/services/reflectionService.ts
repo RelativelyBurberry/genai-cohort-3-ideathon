@@ -18,7 +18,6 @@ import type {
   ReflectApiResponse,
   SummarizeApiResponse,
 } from '../types/reflection';
-
 function assertValidUid(uid: string): void {
   if (!uid || typeof uid !== 'string' || uid.trim().length === 0) {
     throw new Error('Unauthorized: User ID must be provided from active authenticated session.');
@@ -404,12 +403,64 @@ export async function requestAssistantReflection(
 }
 
 /**
+ * Client-side fallback persistence of a Gemini-generated summary and
+ * conversation completion.
+ *
+ * This is ONLY invoked when the backend returns a successful Gemini
+ * summary with `persistence.fallbackRequired = true` (preview sandbox
+ * where Admin SDK persistence lacks IAM). Firestore rules allow the
+ * owner to transition an active conversation to completed under a
+ * narrowly constrained fallback policy. The update is written under
+ * the authenticated user's own conversation document, preserving full
+ * ownership scoping.
+ *
+ * Only these fields may be touched:
+ *   status         -> 'completed'
+ *   summary        -> the generated summary string
+ *   summaryUpdatedAt -> serverTimestamp()
+ *   updatedAt      -> serverTimestamp()
+ *
+ * Production backend persistence via Admin SDK always remains
+ * preferred; this is a narrow capability fallback.
+ */
+export async function completeAndSummarizeConversationClient(
+  uid: string,
+  conversationId: string,
+  summary: string
+): Promise<void> {
+  assertValidUid(uid);
+
+  if (!summary || typeof summary !== 'string' || summary.trim().length === 0) {
+    throw new Error('Summary cannot be empty.');
+  }
+
+  const convRef = doc(db, 'users', uid, 'conversations', conversationId);
+
+  await updateDoc(convRef, {
+    status: 'completed',
+    summary,
+    summaryUpdatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
  * Calls backend POST /api/conversations/:id/summarize with Firebase ID token.
  * Triggers server-side summarization, atomic transition to 'completed', and summary persistence.
+ *
+ * Client-side fallback:
+ *   When the backend successfully generates a Gemini summary but cannot
+ *   persist it (Admin SDK unavailable in the preview sandbox), it returns
+ *   the generated summary with `persistence.fallbackRequired`. In that
+ *   case, this function completes the conversation using the Firebase
+ *   Client SDK (completeAndSummarizeConversationClient) under existing
+ *   narrow ownership rules, then normalizes the response to the
+ *   production shape. If client persistence fails, throw honestly.
  */
 export async function requestSummarize(
   token: string,
-  conversationId: string
+  conversationId: string,
+  uid: string
 ): Promise<SummarizeApiResponse> {
   const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/summarize`, {
     method: 'POST',
@@ -425,6 +476,32 @@ export async function requestSummarize(
     (err as any).statusCode = response.status;
     (err as any).retryAfterSeconds = data.retryAfterSeconds;
     throw err;
+  }
+
+  // Client fallback: backend generated the summary but could not
+  // persist it (preview sandbox). Complete via Client SDK.
+  if (data.persistence?.fallbackRequired && data.summary) {
+    try {
+      await completeAndSummarizeConversationClient(uid, conversationId, data.summary);
+      return {
+        ...data,
+        persistence: {
+          persisted: true,
+          fallbackRequired: false,
+          reason: 'client_fallback_completed',
+        },
+      };
+    } catch (fallbackErr: any) {
+      // If client fallback fails, throw so the UI can surface the
+      // error honestly. The Gemini summary was generated but not
+      // persisted — do not fake success.
+      const err = new Error(
+        fallbackErr?.message ||
+        'Reflection summary was generated but could not be saved. Please tap Retry.'
+      );
+      (err as any).statusCode = 503;
+      throw err;
+    }
   }
 
   return data as SummarizeApiResponse;

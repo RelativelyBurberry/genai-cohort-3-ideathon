@@ -494,6 +494,11 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
     return;
   }
 
+  // Hoisted to the route scope so the catch block can return the
+  // Gemini-generated summary as a client-persistence fallback when
+  // Admin SDK persistence is unavailable in the preview sandbox.
+  let summary: string | null = null;
+
   try {
     // 1. Authoritative conversation verification (USER-AUTHORIZED READ)
     console.log(`[STAGE_TRACE] stage: conversation_lookup | readTransport: ${readTransport} | database: named | status: enter`);
@@ -543,21 +548,66 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
 
     // 4. Generate summary with Gemini
     const turns = formatTurnsForGemini(messages);
-    const summary = await generateConversationSummary(turns);
+    summary = await generateConversationSummary(turns);
 
     // 5. Atomically update conversation to completed state with summary
     //    (BACKEND-OWNED WRITE — privileged Admin SDK only, no user token)
+    //
+    // FALLBACK POLICY (preview sandbox):
+    //   If the runtime lacks Firestore IAM, the Admin SDK throws
+    //   BackendPersistenceUnavailableError. Because Gemini already
+    //   succeeded by this point, we MUST NOT discard the generated
+    //   summary. Instead we return HTTP 200 with the generated summary
+    //   and persistence.fallbackRequired = true. The authenticated
+    //   client then completes the conversation using the Firebase
+    //   Client SDK under existing (narrow) Firestore rules.
+    //
+    //   This fallback is NARROW: it only applies to
+    //   BackendPersistenceUnavailableError (a classified capability
+    //   failure), never to auth failures, Gemini failures, or
+    //   arbitrary errors — those still fail closed.
     await completeAndSummarizeConversation(uid, conversationId, summary, undefined);
 
     res.status(200).json({
+      status: 'success',
       conversationId,
       summary,
-      status: 'completed',
+      persistence: {
+        persisted: true,
+      },
     });
   } catch (error: any) {
-    // Capability error: privileged persistence unavailable in this
-    // runtime. Fail closed; do NOT mark the conversation as
-    // completed when the summary write could not occur.
+    // CAPABILITY FALLBACK: Privileged persistence unavailable in the
+    // preview sandbox AFTER Gemini already succeeded. We MUST NOT
+    // discard the generated summary. Return it with fallbackRequired
+    // so the authenticated client completes the conversation via the
+    // Firebase Client SDK under existing (narrow) ownership rules.
+    //
+    // This is the ONLY error class that triggers the fallback.
+    // Auth failures, Gemini failures, malformed requests, etc.
+    // propagate to the normal error handler below and fail closed.
+    if (error instanceof BackendPersistenceUnavailableError && summary !== null) {
+      console.warn(
+        `[SUMMARIZE_FALLBACK] Gemini summary succeeded but Admin persistence unavailable. ` +
+        `Returning generated summary for client-side completion fallback. ` +
+        `conversationId: ${conversationId}`
+      );
+      res.status(200).json({
+        status: 'success',
+        conversationId,
+        summary,
+        persistence: {
+          persisted: false,
+          fallbackRequired: true,
+          reason: 'backend_persistence_unavailable',
+        },
+      });
+      return;
+    }
+
+    // If BackendPersistenceUnavailableError reached here without
+    // summary (should not happen in the summarize flow, but
+    // defensive), fail closed with the standard 503.
     if (error instanceof BackendPersistenceUnavailableError) {
       const apiResp = toBackendPersistenceApiResponse(error, 'completeAndSummarizeConversation');
       res.status(apiResp.status).json({

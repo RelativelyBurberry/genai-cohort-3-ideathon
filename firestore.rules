@@ -62,11 +62,48 @@ service cloud.firestore {
                     && (!('summary' in request.resource.data) || request.resource.data.summary == null)
                     && (!('summaryUpdatedAt' in request.resource.data) || request.resource.data.summaryUpdatedAt == null);
 
-      // Client update: authenticated owner may update legitimate client-owned metadata (e.g. title, updatedAt),
-      // but is strictly forbidden from creating, modifying, or removing backend-owned lifecycle fields:
+      // Client update: authenticated owner may update legitimate client-owned
+      // metadata (e.g. title, updatedAt), but is strictly forbidden from
+      // creating, modifying, or removing backend-owned lifecycle fields:
       // status, summary, summaryUpdatedAt.
+      //
+      // NARROW FALLBACK (AI Studio preview sandbox):
+      //   When the backend lacks Firestore IAM, it returns the
+      //   Gemini-generated summary and the authenticated client
+      //   completes the conversation via the Client SDK. This
+      //   fallback is tightly constrained:
+      //     - existing status must be exactly "active"
+      //     - requested status must be exactly "completed"
+      //     - summary must be a string of 10–10000 chars
+      //     - summaryUpdatedAt must be a timestamp
+      //     - only status, summary, summaryUpdatedAt, updatedAt may change
+      //   It does NOT permit completed→active, completed→completed
+      //   summary edits, or arbitrary lifecycle field modification.
       allow update: if isOwner(userId)
-                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'summary', 'summaryUpdatedAt']);
+                    && (
+                      // Existing normal client metadata updates
+                      !request.resource.data.diff(resource.data).affectedKeys()
+                        .hasAny(['status', 'summary', 'summaryUpdatedAt'])
+
+                      ||
+
+                      // Narrow AI Studio persistence fallback
+                      (
+                        resource.data.status == "active"
+                        && request.resource.data.status == "completed"
+                        && request.resource.data.summary is string
+                        && request.resource.data.summary.size() >= 10
+                        && request.resource.data.summary.size() <= 10000
+                        && request.resource.data.summaryUpdatedAt is timestamp
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly([
+                            'status',
+                            'summary',
+                            'summaryUpdatedAt',
+                            'updatedAt'
+                          ])
+                      )
+                    );
 
       allow delete: if isOwner(userId);
 
