@@ -20,6 +20,13 @@ A privacy-first reflective intelligence platform that helps people understand th
 
 ---
 
+
+
+https://github.com/user-attachments/assets/d460dfcf-2a08-492e-a853-8b63387cbda5
+
+
+---
+
 ## The idea
 
 Most journaling applications preserve moments.
