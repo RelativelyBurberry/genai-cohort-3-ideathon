@@ -24,7 +24,7 @@
  * - Each channel has independent error handling
  */
 
-import { getAdminDb } from '../firebaseAdmin.js';
+import { getAdminDb, getAdminAuth } from '../firebaseAdmin.js';
 import { sendDiscordNotification, getDiscordConfigStatus } from './discordWebhookService.js';
 import { sendEmailNotification, isEmailDeliveryConfigured } from './emailDeliveryService.js';
 import type {
@@ -66,21 +66,44 @@ async function getChannelConfig(uid: string): Promise<{
 }
 
 /**
- * Get user email from Firebase Auth token or user document.
+ * Get user email.
+ *
+ * Primary source: the user's Firestore document at `users/{uid}`.
+ * Fallback: Firebase Admin Auth (`getUser(uid)`), which covers accounts
+ * whose Firestore user document does not exist or lacks an email field.
+ *
+ * The returned email is used ONLY for delivery; it is never logged and
+ * never included in integration status responses (only a boolean
+ * `hasEmailAddress` is exposed).
  */
 async function getUserEmail(uid: string): Promise<string | null> {
+  // 1. Try the existing Firestore user document.
   try {
     const db = getAdminDb();
     const userDoc = await db.doc(`users/${uid}`).get();
-    
+
     if (userDoc.exists) {
       const data = userDoc.data();
-      return data?.email || null;
+      if (typeof data?.email === 'string' && data.email.trim().length > 0) {
+        return data.email;
+      }
     }
-    
-    return null;
   } catch (error: any) {
-    console.error('[NotificationIntegration] Failed to get user email:', error?.message);
+    console.warn(
+      '[NotificationIntegration] Firestore user email lookup failed; falling back to Admin Auth:',
+      error?.message
+    );
+  }
+
+  // 2. Fallback: Firebase Admin Auth.
+  try {
+    const userRecord = await getAdminAuth().getUser(uid);
+    return userRecord.email || null;
+  } catch (error: any) {
+    console.warn(
+      '[NotificationIntegration] Admin Auth email lookup failed:',
+      error?.message
+    );
     return null;
   }
 }

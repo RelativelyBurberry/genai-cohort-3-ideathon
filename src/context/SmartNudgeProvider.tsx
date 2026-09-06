@@ -22,6 +22,7 @@ import {
   getNotificationPermission,
   sendSmartNudge,
 } from '../services/notificationDelivery';
+import { dispatchSmartNudge } from '../services/integrationsService';
 import { evaluateSmartNudge, localDateString } from '../intelligence/smartNudge';
 
 /**
@@ -99,7 +100,7 @@ export const SmartNudgeProvider: React.FC<SmartNudgeProviderProps> = ({
   children,
   uid,
 }) => {
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
   const isDemo = useIsDemoSession();
 
   // Component-scoped dedupe for identical nudges within the window.
@@ -197,13 +198,11 @@ export const SmartNudgeProvider: React.FC<SmartNudgeProviderProps> = ({
               // Non-fatal: if persistence fails we still don't spam the UI.
             });
 
-            // Phase 14: Dispatch to external channels (non-blocking)
-            // Fire-and-forget; delivery failures are isolated
-            fetch('/api/integrations/dispatch/smart-nudge', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reason: nudge.type }),
-            }).catch(() => {
+            // Phase 14: Dispatch to external channels (non-blocking).
+            // The authenticated service attaches the Firebase Bearer token.
+            // Fire-and-forget; delivery failures are isolated so the
+            // browser/in-app nudge path is NEVER affected.
+            dispatchSmartNudge(getIdToken, nudge.type).catch(() => {
               // Non-fatal: external channel failures are isolated
             });
           }
@@ -215,7 +214,7 @@ export const SmartNudgeProvider: React.FC<SmartNudgeProviderProps> = ({
       // In-app fallback — non-spammy, dismissible.
       setInAppNudge(nudge);
     },
-    [isDemo, buildDemoPrefs]
+    [isDemo, buildDemoPrefs, getIdToken]
   );
 
   /** Manual re-evaluation (used by demo previews). */

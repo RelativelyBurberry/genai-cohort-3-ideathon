@@ -10,9 +10,14 @@
  * - Only masked hints (last 4 chars) are displayed
  * - External reminders NEVER include journal content, reflection text,
  *   Gemini output, mood analysis, or any private user content
+ *
+ * AUTHENTICATION:
+ * Every integration API call passes `getIdToken` from `useAuth()` so the
+ * service layer attaches a fresh `Authorization: Bearer <token>`.
+ * No API request is made for unauthenticated or demo sessions.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Mail, CheckCircle2, AlertTriangle, Info, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useIsDemoSession, DEMO_USER } from '../../demo';
@@ -38,7 +43,7 @@ const DiscordIcon: React.FC<{ className?: string; 'aria-hidden'?: boolean }> = (
 );
 
 export const NotificationChannelsCard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
   const isDemo = useIsDemoSession();
   const uid = isDemo ? DEMO_USER.uid : user?.uid;
 
@@ -53,7 +58,19 @@ export const NotificationChannelsCard: React.FC = () => {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookUrlVisible, setWebhookUrlVisible] = useState(false);
 
-  // Load integration status
+  /**
+   * Refresh canonical channel status from the backend after a mutation.
+   * The backend status endpoint is the single source of truth, so we
+   * never hand-reconstruct stale state locally (avoids the null-status
+   * bug where an initial empty state stayed empty after configuration).
+   */
+  const refreshStatus = useCallback(async (): Promise<void> => {
+    if (isDemo || !uid) return;
+    const fresh = await getIntegrationStatus(getIdToken);
+    setStatus(fresh);
+  }, [isDemo, uid, getIdToken]);
+
+  // Load integration status (only when authenticated; demo stays local)
   useEffect(() => {
     if (!uid || isDemo) {
       setLoading(false);
@@ -61,13 +78,18 @@ export const NotificationChannelsCard: React.FC = () => {
     }
 
     setLoading(true);
-    getIntegrationStatus()
+    getIntegrationStatus(getIdToken)
       .then(setStatus)
-      .catch(() => {
-        setError('Could not load notification channel status.');
+      .catch((err: any) => {
+        // Preserve safe server diagnostics instead of swallowing them.
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Could not load notification channel status.';
+        setError(message);
       })
       .finally(() => setLoading(false));
-  }, [uid, isDemo]);
+  }, [uid, isDemo, getIdToken]);
 
   const handleEmailToggle = async (enabled: boolean) => {
     if (!uid || isDemo) return;
@@ -76,10 +98,8 @@ export const NotificationChannelsCard: React.FC = () => {
     setSaving(true);
 
     try {
-      await setEmailEnabled(enabled);
-      setStatus((prev) =>
-        prev ? { ...prev, email: { ...prev.email, enabled } } : prev
-      );
+      await setEmailEnabled(getIdToken, enabled);
+      await refreshStatus();
       setSuccessMsg(enabled ? 'Email reminders enabled.' : 'Email reminders disabled.');
     } catch (err: any) {
       setError(err.message || 'Failed to update email preference.');
@@ -95,11 +115,11 @@ export const NotificationChannelsCard: React.FC = () => {
     setSaving(true);
 
     try {
-      await setDiscordEnabled(enabled);
-      setStatus((prev) =>
-        prev ? { ...prev, discord: { ...prev.discord, enabled } } : prev
+      await setDiscordEnabled(getIdToken, enabled);
+      await refreshStatus();
+      setSuccessMsg(
+        enabled ? 'Discord notifications enabled.' : 'Discord notifications disabled.'
       );
-      setSuccessMsg(enabled ? 'Discord notifications enabled.' : 'Discord notifications disabled.');
     } catch (err: any) {
       setError(err.message || 'Failed to update Discord preference.');
     } finally {
@@ -114,20 +134,8 @@ export const NotificationChannelsCard: React.FC = () => {
     setSaving(true);
 
     try {
-      const result = await configureDiscordWebhook(webhookUrl.trim());
-      setStatus((prev) =>
-        prev
-          ? {
-              ...prev,
-              discord: {
-                ...prev.discord,
-                configured: true,
-                enabled: true,
-                webhookHint: result.webhookHint,
-              },
-            }
-          : prev
-      );
+      await configureDiscordWebhook(getIdToken, webhookUrl.trim());
+      await refreshStatus();
       setWebhookUrl('');
       setShowWebhookInput(false);
       setSuccessMsg('Discord webhook configured successfully.');
@@ -147,19 +155,8 @@ export const NotificationChannelsCard: React.FC = () => {
     setSaving(true);
 
     try {
-      await removeDiscordWebhook();
-      setStatus((prev) =>
-        prev
-          ? {
-              ...prev,
-              discord: {
-                enabled: false,
-                configured: false,
-                webhookHint: undefined,
-              },
-            }
-          : prev
-      );
+      await removeDiscordWebhook(getIdToken);
+      await refreshStatus();
       setSuccessMsg('Discord webhook removed.');
     } catch (err: any) {
       setError(err.message || 'Failed to remove Discord webhook.');
@@ -175,7 +172,7 @@ export const NotificationChannelsCard: React.FC = () => {
     setSaving(true);
 
     try {
-      const result = await sendDiscordTestNotification();
+      const result = await sendDiscordTestNotification(getIdToken);
       if (result.delivered) {
         setSuccessMsg('Test notification sent to Discord.');
       } else {
@@ -270,7 +267,8 @@ export const NotificationChannelsCard: React.FC = () => {
         </div>
 
         <p className="channel-description">
-          Get Reflectra notifications in your Discord server. Your webhook is encrypted and never exposed.
+          Get Reflectra notifications in your Discord server. Your webhook is
+          encrypted and never exposed.
         </p>
 
         {isDemo && (
@@ -396,7 +394,8 @@ export const NotificationChannelsCard: React.FC = () => {
       {/* Privacy note */}
       <p className="nudge-privacy-note">
         <Info className="nudge-privacy-icon" aria-hidden="true" />
-        External notifications never include journal entries, conversations, mood analysis, or AI responses.
+        External notifications never include journal entries, conversations,
+        mood analysis, or AI responses.
       </p>
     </div>
   );
