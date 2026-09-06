@@ -75,3 +75,12 @@ export function getAdminDb(): Firestore {
   }
   return getFirestore(app);
 }
+
+/**
+ * Reset cached instances for isolated test environments.
+ */
+export function _resetAdminForTesting(): void {
+  adminApp = null;
+  cachedDatabaseId = null;
+}
+

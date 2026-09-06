@@ -27,6 +27,7 @@ import {
 import {
   dispatchTestNotifications,
   getNotificationIntegrationStatus,
+  setEmailNotificationPreference,
 } from '../services/notificationIntegrationService.js';
 
 export const integrationsRouter = Router();
@@ -264,30 +265,21 @@ integrationsRouter.patch(
       return;
     }
 
-    // Update email preference in notification preferences document
-    const { getAdminDb } = await import('../firebaseAdmin.js');
-    const db = getAdminDb();
+    // Update email preference via notification service
+    const result = await setEmailNotificationPreference(uid, enabled);
 
-    try {
-      await db.doc(`users/${uid}/preferences/notifications`).set(
-        {
-          emailEnabled: enabled,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-
-      res.status(200).json({
-        status: 'updated',
-        enabled,
-      });
-    } catch (error: any) {
-      console.error('[Integrations] Failed to update email preference:', error?.message);
+    if (!result.success) {
       res.status(500).json({
         error: 'update_failed',
         message: 'Failed to update email notification preference.',
       });
+      return;
     }
+
+    res.status(200).json({
+      status: 'updated',
+      enabled,
+    });
   }
 );
 
@@ -311,7 +303,8 @@ integrationsRouter.get(
       return;
     }
 
-    const status = await getNotificationIntegrationStatus(uid);
+    const verifiedEmail = req.user?.email || null;
+    const status = await getNotificationIntegrationStatus(uid, verifiedEmail);
 
     res.status(200).json(status);
   }
@@ -347,11 +340,12 @@ integrationsRouter.post(
       return;
     }
 
+    const verifiedEmail = req.user?.email || null;
     // Dispatch to external channels (non-blocking in practice, but we await for response)
     const { dispatchSmartNudge } = await import('../services/notificationIntegrationService.js');
     
     // Fire-and-forget - we don't wait for external channel results
-    dispatchSmartNudge(uid, reason as SmartNudgeReason).catch((err) => {
+    dispatchSmartNudge(uid, reason as SmartNudgeReason, verifiedEmail).catch((err) => {
       console.warn('[SmartNudgeDispatch] External channel dispatch failed (non-fatal):', err?.message);
     });
 
@@ -376,7 +370,8 @@ integrationsRouter.post(
       return;
     }
 
-    const results = await dispatchTestNotifications(uid);
+    const verifiedEmail = req.user?.email || null;
+    const results = await dispatchTestNotifications(uid, verifiedEmail);
 
     res.status(200).json({
       status: 'test_dispatched',

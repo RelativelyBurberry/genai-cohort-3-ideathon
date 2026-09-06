@@ -8773,6 +8773,40 @@ textarea.input,
   padding-top: 0.25rem;
 }
 
+.discord-instructions {
+  background: var(--color-surface-subtle, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-muted-foreground);
+}
+
+.discord-instructions-title {
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin-bottom: 0.375rem;
+}
+
+.discord-instructions-list {
+  margin: 0;
+  padding-left: 1.125rem;
+  list-style-type: decimal;
+}
+
+.discord-instructions-list li {
+  margin-bottom: 0.25rem;
+}
+
+.discord-instructions-list li:last-child {
+  margin-bottom: 0;
+}
+
+.discord-instructions-list strong {
+  color: var(--color-foreground);
+}
+
 .discord-field {
   display: flex;
   flex-direction: column;

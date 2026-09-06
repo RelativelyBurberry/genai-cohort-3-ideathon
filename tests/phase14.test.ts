@@ -352,4 +352,24 @@ describe('Settings UI Integration', () => {
     expect(source).toContain('NotificationSettingsCard');
     expect(source).toContain('NotificationChannelsCard');
   });
+
+  it('NotificationChannelsCard provides inline Discord webhook setup instructions', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    const cardPath = path.join(
+      process.cwd(),
+      'src/components/settings/NotificationChannelsCard.tsx'
+    );
+
+    const source = fs.readFileSync(cardPath, 'utf-8');
+
+    // Verify inline guide elements exist
+    expect(source).toContain('How to get a Discord Webhook URL:');
+    expect(source).toContain('Server Settings');
+    expect(source).toContain('Integrations');
+    expect(source).toContain('New Webhook');
+    expect(source).toContain('Copy Webhook URL');
+  });
 });
+

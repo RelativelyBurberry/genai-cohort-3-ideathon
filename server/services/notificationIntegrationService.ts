@@ -24,7 +24,14 @@
  * - Each channel has independent error handling
  */
 
-import { getAdminDb, getAdminAuth } from '../firebaseAdmin.js';
+import { getAdminDb } from '../firebaseAdmin.js';
+import {
+  withBackendReadCapability,
+  withBackendPersistenceCapability,
+  BackendReadUnavailableError,
+  BackendPersistenceUnavailableError,
+  isAdminPermissionDeniedError,
+} from './privilegedPersistence.js';
 import { sendDiscordNotification, getDiscordConfigStatus } from './discordWebhookService.js';
 import { sendEmailNotification, isEmailDeliveryConfigured } from './emailDeliveryService.js';
 import type {
@@ -32,6 +39,48 @@ import type {
   NotificationEventType,
   ExternalChannelDeliveryResult,
 } from '../../src/types/notifications';
+
+/* ------------------------------------------------------------------ */
+/* In-memory fallback preferences (for sandbox/preview environments)  */
+/* ------------------------------------------------------------------ */
+
+const sandboxEmailPrefs = new Map<string, boolean>();
+
+/**
+ * Reset in-memory preferences for testing.
+ */
+export function _resetSandboxNotificationServiceForTesting(): void {
+  sandboxEmailPrefs.clear();
+}
+
+/**
+ * Persist email notification preference.
+ */
+export async function setEmailNotificationPreference(
+  uid: string,
+  enabled: boolean
+): Promise<{ success: boolean }> {
+  sandboxEmailPrefs.set(uid, enabled);
+  try {
+    await withBackendPersistenceCapability('setEmailNotificationPreference', async () => {
+      const db = getAdminDb();
+      await db.doc(`users/${uid}/preferences/notifications`).set(
+        {
+          emailEnabled: enabled,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    });
+    return { success: true };
+  } catch (error: any) {
+    if (error instanceof BackendPersistenceUnavailableError || isAdminPermissionDeniedError(error)) {
+      return { success: true };
+    }
+    console.error('[NotificationIntegration] Failed to set email preference:', error?.message);
+    return { success: false };
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Channel Configuration Retrieval                                     */
@@ -45,67 +94,104 @@ async function getChannelConfig(uid: string): Promise<{
   discordEnabled: boolean;
   discordConfigured: boolean;
 }> {
+  const fallbackEmail = sandboxEmailPrefs.get(uid) ?? false;
   try {
     const db = getAdminDb();
-    const prefDoc = await db.doc(`users/${uid}/preferences/notifications`).get();
-    
+    if (!db || typeof db.doc !== 'function') {
+      const discord = await getDiscordConfigStatus(uid);
+      return {
+        emailEnabled: fallbackEmail,
+        discordEnabled: discord.enabled,
+        discordConfigured: discord.configured,
+      };
+    }
+
+    const prefDoc = await withBackendReadCapability('getChannelConfig', () =>
+      db.doc(`users/${uid}/preferences/notifications`).get()
+    );
+
     if (!prefDoc.exists) {
-      return { emailEnabled: false, discordEnabled: false, discordConfigured: false };
+      const discord = await getDiscordConfigStatus(uid);
+      return {
+        emailEnabled: fallbackEmail,
+        discordEnabled: discord.enabled,
+        discordConfigured: discord.configured,
+      };
     }
 
     const data = prefDoc.data();
     return {
-      emailEnabled: data?.emailEnabled || false,
+      emailEnabled: typeof data?.emailEnabled === 'boolean' ? data.emailEnabled : fallbackEmail,
       discordEnabled: data?.discordEnabled || false,
       discordConfigured: data?.discordConfigured || false,
     };
   } catch (error: any) {
+    if (error instanceof BackendReadUnavailableError || isAdminPermissionDeniedError(error)) {
+      const discord = await getDiscordConfigStatus(uid);
+      return {
+        emailEnabled: fallbackEmail,
+        discordEnabled: discord.enabled,
+        discordConfigured: discord.configured,
+      };
+    }
     console.error('[NotificationIntegration] Failed to get channel config:', error?.message);
-    return { emailEnabled: false, discordEnabled: false, discordConfigured: false };
+    const discord = await getDiscordConfigStatus(uid);
+    return {
+      emailEnabled: fallbackEmail,
+      discordEnabled: discord.enabled,
+      discordConfigured: discord.configured,
+    };
   }
 }
 
 /**
- * Get user email.
+ * Resolve user email for external notification delivery.
  *
- * Primary source: the user's Firestore document at `users/{uid}`.
- * Fallback: Firebase Admin Auth (`getUser(uid)`), which covers accounts
- * whose Firestore user document does not exist or lacks an email field.
+ * PRIMARY SOURCE: Verified email from authentication token (`req.user.email`),
+ * passed directly from the authenticated request route.
  *
- * The returned email is used ONLY for delivery; it is never logged and
- * never included in integration status responses (only a boolean
- * `hasEmailAddress` is exposed).
+ * SECONDARY SOURCE (background/worker only): Firestore user document at `users/{uid}`.
+ *
+ * CRITICAL ARCHITECTURAL CONSTRAINTS:
+ * - NEVER use ADMIN_EMAIL_ALLOWLIST (reserved strictly for Phase 11 RBAC).
+ * - NEVER call Firebase Admin Auth `getUser(uid)` when verified email is provided.
+ * - The resolved email is used strictly for message delivery and never exposed across the API.
  */
-async function getUserEmail(uid: string): Promise<string | null> {
-  // 1. Try the existing Firestore user document.
+export async function getUserEmail(
+  uid: string,
+  userEmail?: string | null
+): Promise<string | null> {
+  // 1. Primary source: verified email from authenticated request.
+  if (userEmail && typeof userEmail === 'string' && userEmail.trim().length > 0) {
+    return userEmail.trim();
+  }
+
+  // 2. Secondary source (for background jobs without request context): Firestore user document.
   try {
     const db = getAdminDb();
-    const userDoc = await db.doc(`users/${uid}`).get();
+    if (db && typeof db.doc === 'function') {
+      const userDoc = await withBackendReadCapability('getUserEmail', () =>
+        db.doc(`users/${uid}`).get()
+      );
 
-    if (userDoc.exists) {
-      const data = userDoc.data();
-      if (typeof data?.email === 'string' && data.email.trim().length > 0) {
-        return data.email;
+      if (userDoc.exists) {
+        const data = userDoc.data();
+        if (typeof data?.email === 'string' && data.email.trim().length > 0) {
+          return data.email.trim();
+        }
       }
     }
   } catch (error: any) {
+    if (error instanceof BackendReadUnavailableError || isAdminPermissionDeniedError(error)) {
+      return null;
+    }
     console.warn(
-      '[NotificationIntegration] Firestore user email lookup failed; falling back to Admin Auth:',
+      '[NotificationIntegration] Firestore user email lookup failed:',
       error?.message
     );
   }
 
-  // 2. Fallback: Firebase Admin Auth.
-  try {
-    const userRecord = await getAdminAuth().getUser(uid);
-    return userRecord.email || null;
-  } catch (error: any) {
-    console.warn(
-      '[NotificationIntegration] Admin Auth email lookup failed:',
-      error?.message
-    );
-    return null;
-  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -135,11 +221,13 @@ export interface DispatchResult {
  *
  * @param uid User ID
  * @param event Safe notification event (constrained type)
+ * @param userEmail Optional verified user email from authenticated request
  * @returns Results for each channel
  */
 export async function dispatchToExternalChannels(
   uid: string,
-  event: SafeNotificationEvent
+  event: SafeNotificationEvent,
+  userEmail?: string | null
 ): Promise<DispatchResult> {
   const result: DispatchResult = {};
 
@@ -166,7 +254,7 @@ export async function dispatchToExternalChannels(
   // Dispatch to Email (isolated)
   if (config.emailEnabled) {
     try {
-      const email = await getUserEmail(uid);
+      const email = await getUserEmail(uid, userEmail);
       if (email) {
         const emailResult = await sendEmailNotification(email, event.type);
         result.email = emailResult;
@@ -200,38 +288,45 @@ export async function dispatchToExternalChannels(
  */
 export async function dispatchSmartNudge(
   uid: string,
-  reason: 'unfinished_reflection' | 'preferred_time' | 'inactivity'
+  reason: 'unfinished_reflection' | 'preferred_time' | 'inactivity',
+  userEmail?: string | null
 ): Promise<DispatchResult> {
   const event: SafeNotificationEvent = {
     type: 'smart_nudge',
     reason,
   };
 
-  return dispatchToExternalChannels(uid, event);
+  return dispatchToExternalChannels(uid, event, userEmail);
 }
 
 /**
  * Dispatch a reflection completed notification.
  * Called from the reflection route after successful completion.
  */
-export async function dispatchReflectionCompleted(uid: string): Promise<DispatchResult> {
+export async function dispatchReflectionCompleted(
+  uid: string,
+  userEmail?: string | null
+): Promise<DispatchResult> {
   const event: SafeNotificationEvent = {
     type: 'reflection_completed',
   };
 
-  return dispatchToExternalChannels(uid, event);
+  return dispatchToExternalChannels(uid, event, userEmail);
 }
 
 /**
  * Dispatch a PatternShift ready notification.
  * Called from the PatternShift route after successful analysis.
  */
-export async function dispatchPatternShiftReady(uid: string): Promise<DispatchResult> {
+export async function dispatchPatternShiftReady(
+  uid: string,
+  userEmail?: string | null
+): Promise<DispatchResult> {
   const event: SafeNotificationEvent = {
     type: 'patternshift_ready',
   };
 
-  return dispatchToExternalChannels(uid, event);
+  return dispatchToExternalChannels(uid, event, userEmail);
 }
 
 /* ------------------------------------------------------------------ */
@@ -243,7 +338,10 @@ export async function dispatchPatternShiftReady(uid: string): Promise<DispatchRe
  * This is an explicit user action from Settings and does NOT
  * affect anti-spam tracking.
  */
-export async function dispatchTestNotifications(uid: string): Promise<{
+export async function dispatchTestNotifications(
+  uid: string,
+  userEmail?: string | null
+): Promise<{
   email?: ExternalChannelDeliveryResult;
   discord?: ExternalChannelDeliveryResult;
 }> {
@@ -270,7 +368,7 @@ export async function dispatchTestNotifications(uid: string): Promise<{
   // Test Email
   if (config.emailEnabled) {
     try {
-      const email = await getUserEmail(uid);
+      const email = await getUserEmail(uid, userEmail);
       if (email) {
         const emailResult = await sendEmailNotification(email, 'smart_nudge');
         result.email = emailResult;
@@ -300,7 +398,10 @@ export async function dispatchTestNotifications(uid: string): Promise<{
 /**
  * Get notification integration status for diagnostics.
  */
-export async function getNotificationIntegrationStatus(uid: string): Promise<{
+export async function getNotificationIntegrationStatus(
+  uid: string,
+  userEmail?: string | null
+): Promise<{
   email: {
     enabled: boolean;
     configured: boolean;
@@ -313,7 +414,7 @@ export async function getNotificationIntegrationStatus(uid: string): Promise<{
   };
 }> {
   const config = await getChannelConfig(uid);
-  const email = await getUserEmail(uid);
+  const email = await getUserEmail(uid, userEmail);
   const discordStatus = await getDiscordConfigStatus(uid);
 
   return {

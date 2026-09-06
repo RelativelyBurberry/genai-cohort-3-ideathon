@@ -324,6 +324,16 @@ export const NotificationChannelsCard: React.FC = () => {
               </button>
             ) : (
               <div className="discord-webhook-form">
+                <div className="discord-instructions" role="region" aria-label="Discord webhook setup instructions">
+                  <p className="discord-instructions-title">How to get a Discord Webhook URL:</p>
+                  <ol className="discord-instructions-list">
+                    <li>In Discord, open <strong>Server Settings</strong> (or edit a specific channel).</li>
+                    <li>Go to <strong>Integrations</strong> → <strong>Webhooks</strong>.</li>
+                    <li>Click <strong>New Webhook</strong>, select your desired channel, and click <strong>Copy Webhook URL</strong>.</li>
+                    <li>Paste the URL below and click <strong>Save Securely</strong>.</li>
+                  </ol>
+                </div>
+
                 <label className="discord-field">
                   <span className="discord-field-label">Discord Webhook URL</span>
                   <div className="discord-input-row">

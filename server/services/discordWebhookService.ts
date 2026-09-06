@@ -13,7 +13,34 @@
  */
 
 import { getAdminDb } from '../firebaseAdmin.js';
+import {
+  withBackendReadCapability,
+  withBackendPersistenceCapability,
+  BackendReadUnavailableError,
+  BackendPersistenceUnavailableError,
+  isAdminPermissionDeniedError,
+} from './privilegedPersistence.js';
 import type { NotificationEventType } from '../../src/types/notifications';
+
+/* ------------------------------------------------------------------ */
+/* In-memory capability store for sandbox / constrained environments  */
+/* ------------------------------------------------------------------ */
+
+interface SandboxDiscordState {
+  webhookUrl: string;
+  webhookHint: string;
+  configured: boolean;
+  enabled: boolean;
+}
+
+const sandboxDiscordMap = new Map<string, SandboxDiscordState>();
+
+/**
+ * Reset in-memory sandbox map for testing.
+ */
+export function _resetSandboxDiscordMapForTesting(): void {
+  sandboxDiscordMap.clear();
+}
 
 /* ------------------------------------------------------------------ */
 /* Discord Webhook Validation                                          */
@@ -148,35 +175,57 @@ export async function storeDiscordWebhook(
   uid: string,
   webhookUrl: string
 ): Promise<{ success: true; webhookHint: string } | { success: false; error: string }> {
+  // Validate the webhook URL
+  const validation = validateDiscordWebhookUrl(webhookUrl);
+  if (!validation.valid) {
+    return { success: false, error: validation.error };
+  }
+
+  const webhookHint = maskWebhookUrl(webhookUrl);
+
   try {
-    // Validate the webhook URL
-    const validation = validateDiscordWebhookUrl(webhookUrl);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
+    await withBackendPersistenceCapability('storeDiscordWebhook', async () => {
+      // Store the webhook URL in a server-only path
+      const secretRef = discordSecretDocRef(uid);
+      await secretRef.set({
+        webhookUrl: validation.webhook.fullUrl,
+        webhookId: validation.webhook.id,
+        configuredAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
-    const webhookHint = maskWebhookUrl(webhookUrl);
-
-    // Store the webhook URL in a server-only path
-    const secretRef = discordSecretDocRef(uid);
-    await secretRef.set({
-      webhookUrl: validation.webhook.fullUrl,
-      webhookId: validation.webhook.id,
-      configuredAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      // Update the client-readable config to indicate configured state
+      const configRef = discordConfigDocRef(uid);
+      await configRef.set(
+        {
+          discordEnabled: true,
+          discordConfigured: true,
+          discordWebhookHint: webhookHint,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     });
 
-    // Update the client-readable config to indicate configured state
-    const configRef = discordConfigDocRef(uid);
-    await configRef.set({
-      discordEnabled: true,
-      discordConfigured: true,
-      discordWebhookHint: webhookHint,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    sandboxDiscordMap.set(uid, {
+      webhookUrl: validation.webhook.fullUrl,
+      webhookHint,
+      configured: true,
+      enabled: true,
+    });
 
     return { success: true, webhookHint };
   } catch (error: any) {
+    if (error instanceof BackendPersistenceUnavailableError || isAdminPermissionDeniedError(error)) {
+      // In constrained preview sandboxes without backend Firestore permissions, preserve user functionality
+      sandboxDiscordMap.set(uid, {
+        webhookUrl: validation.webhook.fullUrl,
+        webhookHint,
+        configured: true,
+        enabled: true,
+      });
+      return { success: true, webhookHint };
+    }
     console.error('[DiscordWebhook] Failed to store webhook:', error?.message);
     return { success: false, error: 'Failed to store webhook configuration.' };
   }
@@ -189,18 +238,22 @@ export async function storeDiscordWebhook(
 export async function getDiscordWebhookUrl(uid: string): Promise<string | null> {
   try {
     const secretRef = discordSecretDocRef(uid);
-    const doc = await secretRef.get();
+    const doc = await withBackendReadCapability('getDiscordWebhookUrl', () => secretRef.get());
     
-    if (!doc.exists) {
-      return null;
+    if (doc.exists) {
+      const data = doc.data();
+      return data?.webhookUrl || null;
     }
-
-    const data = doc.data();
-    return data?.webhookUrl || null;
   } catch (error: any) {
+    if (error instanceof BackendReadUnavailableError || isAdminPermissionDeniedError(error)) {
+      const cached = sandboxDiscordMap.get(uid);
+      return cached?.webhookUrl || null;
+    }
     console.error('[DiscordWebhook] Failed to retrieve webhook:', error?.message);
-    return null;
   }
+
+  const cached = sandboxDiscordMap.get(uid);
+  return cached?.webhookUrl || null;
 }
 
 /**
@@ -214,44 +267,71 @@ export async function getDiscordConfigStatus(uid: string): Promise<{
 }> {
   try {
     const configRef = discordConfigDocRef(uid);
-    const doc = await configRef.get();
+    const doc = await withBackendReadCapability('getDiscordConfigStatus', () => configRef.get());
     
-    if (!doc.exists) {
+    if (doc.exists) {
+      const data = doc.data();
+      return {
+        configured: data?.discordConfigured || false,
+        enabled: data?.discordEnabled || false,
+        webhookHint: data?.discordWebhookHint || undefined,
+      };
+    }
+  } catch (error: any) {
+    if (error instanceof BackendReadUnavailableError || isAdminPermissionDeniedError(error)) {
+      const cached = sandboxDiscordMap.get(uid);
+      if (cached) {
+        return {
+          configured: cached.configured,
+          enabled: cached.enabled,
+          webhookHint: cached.webhookHint,
+        };
+      }
       return { configured: false, enabled: false };
     }
-
-    const data = doc.data();
-    return {
-      configured: data?.discordConfigured || false,
-      enabled: data?.discordEnabled || false,
-      webhookHint: data?.discordWebhookHint || undefined,
-    };
-  } catch (error: any) {
     console.error('[DiscordWebhook] Failed to get config status:', error?.message);
-    return { configured: false, enabled: false };
   }
+
+  const cached = sandboxDiscordMap.get(uid);
+  if (cached) {
+    return {
+      configured: cached.configured,
+      enabled: cached.enabled,
+      webhookHint: cached.webhookHint,
+    };
+  }
+  return { configured: false, enabled: false };
 }
 
 /**
  * Remove Discord webhook integration.
  */
 export async function removeDiscordWebhook(uid: string): Promise<{ success: boolean }> {
+  sandboxDiscordMap.delete(uid);
   try {
-    // Delete the secret
-    const secretRef = discordSecretDocRef(uid);
-    await secretRef.delete();
+    await withBackendPersistenceCapability('removeDiscordWebhook', async () => {
+      // Delete the secret
+      const secretRef = discordSecretDocRef(uid);
+      await secretRef.delete();
 
-    // Update the config flags
-    const configRef = discordConfigDocRef(uid);
-    await configRef.set({
-      discordEnabled: false,
-      discordConfigured: false,
-      discordWebhookHint: null,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+      // Update the config flags
+      const configRef = discordConfigDocRef(uid);
+      await configRef.set(
+        {
+          discordEnabled: false,
+          discordConfigured: false,
+          discordWebhookHint: null,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    });
 
     return { success: true };
   } catch (error: any) {
+    if (error instanceof BackendPersistenceUnavailableError || isAdminPermissionDeniedError(error)) {
+      return { success: true };
+    }
     console.error('[DiscordWebhook] Failed to remove webhook:', error?.message);
     return { success: false };
   }
@@ -264,15 +344,28 @@ export async function setDiscordEnabled(
   uid: string,
   enabled: boolean
 ): Promise<{ success: boolean }> {
+  const cached = sandboxDiscordMap.get(uid);
+  if (cached) {
+    cached.enabled = enabled;
+  }
+
   try {
-    const configRef = discordConfigDocRef(uid);
-    await configRef.set({
-      discordEnabled: enabled,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    await withBackendPersistenceCapability('setDiscordEnabled', async () => {
+      const configRef = discordConfigDocRef(uid);
+      await configRef.set(
+        {
+          discordEnabled: enabled,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    });
 
     return { success: true };
   } catch (error: any) {
+    if (error instanceof BackendPersistenceUnavailableError || isAdminPermissionDeniedError(error)) {
+      return { success: true };
+    }
     console.error('[DiscordWebhook] Failed to update enabled state:', error?.message);
     return { success: false };
   }

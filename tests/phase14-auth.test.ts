@@ -406,12 +406,11 @@ describe('security boundaries preserved', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Email address fallback via Firebase Admin Auth                      */
+/* Email address resolution & delivery (Phase 14 architectural fix)    */
 /* ------------------------------------------------------------------ */
 
 // Hoisted mocks referenced by the hoisted module mock below.
-const adminAuthMock = vi.hoisted(() => ({
-  getUser: vi.fn(),
+const dbMock = vi.hoisted(() => ({
   dbDocGet: vi.fn(),
   dbDocSet: vi.fn(),
   dbDocDelete: vi.fn(),
@@ -420,22 +419,18 @@ const adminAuthMock = vi.hoisted(() => ({
 vi.mock('../server/firebaseAdmin.js', () => ({
   getAdminDb: () => ({
     doc: (path: string) => ({
-      get: () => adminAuthMock.dbDocGet(path),
-      set: (data: unknown, opts?: unknown) => adminAuthMock.dbDocSet(path, data, opts),
-      delete: () => adminAuthMock.dbDocDelete(path),
+      get: () => dbMock.dbDocGet(path),
+      set: (data: unknown, opts?: unknown) => dbMock.dbDocSet(path, data, opts),
+      delete: () => dbMock.dbDocDelete(path),
     }),
-  }),
-  getAdminAuth: () => ({
-    getUser: adminAuthMock.getUser,
   }),
 }));
 
-describe('email address fallback via Firebase Admin Auth', () => {
+describe('email address resolution and delivery', () => {
   beforeEach(() => {
-    // Default: Firestore user doc missing → email delivered via the prefs doc.
-    adminAuthMock.dbDocGet.mockReset();
-    adminAuthMock.dbDocGet.mockImplementation(async (path: string) => {
-      if (path === 'users/fallbackuid/preferences/notifications') {
+    dbMock.dbDocGet.mockReset();
+    dbMock.dbDocGet.mockImplementation(async (path: string) => {
+      if (path === 'users/testuser/preferences/notifications') {
         return {
           exists: true,
           data: () => ({
@@ -445,42 +440,7 @@ describe('email address fallback via Firebase Admin Auth', () => {
           }),
         };
       }
-      // users/fallbackuid (email source) — absent by default.
-      return { exists: false };
-    });
-
-    adminAuthMock.getUser.mockReset();
-    adminAuthMock.getUser.mockResolvedValue({ email: 'fallback@example.com' });
-  });
-
-  it('falls back to Admin Auth when the Firestore user document lacks an email', async () => {
-    const { dispatchToExternalChannels } = await import(
-      '../server/services/notificationIntegrationService'
-    );
-
-    const result = await dispatchToExternalChannels('fallbackuid', {
-      type: 'smart_nudge',
-      reason: 'inactivity',
-    });
-
-    expect(adminAuthMock.getUser).toHaveBeenCalledWith('fallbackuid');
-    // Development noop provider delivers successfully.
-    expect(result.email?.delivered).toBe(true);
-  });
-
-  it('prefers the Firestore user document email when present', async () => {
-    adminAuthMock.dbDocGet.mockImplementation(async (path: string) => {
-      if (path === 'users/fallbackuid/preferences/notifications') {
-        return {
-          exists: true,
-          data: () => ({
-            emailEnabled: true,
-            discordEnabled: false,
-            discordConfigured: false,
-          }),
-        };
-      }
-      if (path === 'users/fallbackuid') {
+      if (path === 'users/testuser') {
         return {
           exists: true,
           data: () => ({ email: 'doc@example.com' }),
@@ -488,17 +448,49 @@ describe('email address fallback via Firebase Admin Auth', () => {
       }
       return { exists: false };
     });
+  });
 
-    const { dispatchToExternalChannels } = await import(
+  it('uses verified token email (req.user.email) directly without querying users/{uid}', async () => {
+    const { getUserEmail, dispatchToExternalChannels } = await import(
       '../server/services/notificationIntegrationService'
     );
 
-    const result = await dispatchToExternalChannels('fallbackuid', {
+    // When primary verified email is supplied, it is used immediately
+    const resolvedEmail = await getUserEmail('testuser', 'verified@example.com');
+    expect(resolvedEmail).toBe('verified@example.com');
+
+    // And when dispatching, delivery succeeds with the verified email
+    const result = await dispatchToExternalChannels(
+      'testuser',
+      { type: 'smart_nudge', reason: 'inactivity' },
+      'verified@example.com'
+    );
+    expect(result.email?.delivered).toBe(true);
+  });
+
+  it('falls back to Firestore user document when verified email is absent (background jobs)', async () => {
+    const { getUserEmail, dispatchToExternalChannels } = await import(
+      '../server/services/notificationIntegrationService'
+    );
+
+    // Absent verified email -> reads users/{uid} document
+    const resolvedEmail = await getUserEmail('testuser');
+    expect(resolvedEmail).toBe('doc@example.com');
+
+    const result = await dispatchToExternalChannels('testuser', {
       type: 'smart_nudge',
       reason: 'inactivity',
     });
-
-    expect(adminAuthMock.getUser).not.toHaveBeenCalled();
     expect(result.email?.delivered).toBe(true);
+  });
+
+  it('returns hasEmailAddress true in getNotificationIntegrationStatus when email is supplied', async () => {
+    const { getNotificationIntegrationStatus } = await import(
+      '../server/services/notificationIntegrationService'
+    );
+
+    const status = await getNotificationIntegrationStatus('testuser', 'user@example.com');
+    expect(status.email.hasEmailAddress).toBe(true);
+    expect(status.email.enabled).toBe(true);
   });
 });
