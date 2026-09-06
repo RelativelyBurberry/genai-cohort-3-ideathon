@@ -16,7 +16,21 @@ import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 
 type ViewMode = 'list' | 'create' | 'detail' | 'edit';
 
-export const JournalDashboard: React.FC = () => {
+interface JournalDashboardProps {
+  /**
+   * When set (Phase 21 Mood Constellation click-through), the matching
+   * journal entry is auto-opened in detail mode once it arrives from the
+   * data subscription. Cleared via onInitialEntryConsumed.
+   */
+  initialEntryId?: string | null;
+  /** Called after the initial entry has been opened (one-time). */
+  onInitialEntryConsumed?: () => void;
+}
+
+export const JournalDashboard: React.FC<JournalDashboardProps> = ({
+  initialEntryId = null,
+  onInitialEntryConsumed,
+}) => {
   const { user } = useAuth();
   const {
     isDemoSession,
@@ -42,6 +56,18 @@ export const JournalDashboard: React.FC = () => {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+
+  // Phase 21: once-only consumption of a Mood Constellation click-through.
+  const consumedInitialRef = React.useRef(false);
+  useEffect(() => {
+    if (!initialEntryId || consumedInitialRef.current) return;
+    const target = entries.find((entry) => entry.id === initialEntryId);
+    if (!target) return;
+    consumedInitialRef.current = true;
+    setSelectedEntry(target);
+    setViewMode('detail');
+    onInitialEntryConsumed?.();
+  }, [initialEntryId, entries, onInitialEntryConsumed]);
 
   // Auto-dismiss notification after 4 seconds
   useEffect(() => {

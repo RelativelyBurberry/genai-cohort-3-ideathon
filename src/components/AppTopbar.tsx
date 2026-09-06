@@ -76,6 +76,11 @@ export const AppTopbar: React.FC<AppTopbarProps> = ({ activeView, onViewChange }
               onClick={() => handleViewChange('patternshift')}
             />
             <MobileNavItem
+              label="Mood Constellation"
+              active={activeView === 'constellation'}
+              onClick={() => handleViewChange('constellation')}
+            />
+            <MobileNavItem
               label="Admin Console"
               active={activeView === 'admin'}
               onClick={() => handleViewChange('admin')}

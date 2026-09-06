@@ -10,6 +10,7 @@ import { HomeDashboard } from './HomeDashboard';
 import { JournalDashboard } from './journal/JournalDashboard';
 import { GuidedReflectionDashboard } from './reflection/GuidedReflectionDashboard';
 import { PatternShiftDashboard } from './insights/PatternShiftDashboard';
+import { MoodConstellationDashboard } from './constellation/MoodConstellationDashboard';
 import { SettingsView } from './SettingsView';
 import { DemoAdminConsole } from './admin/DemoAdminConsole';
 
@@ -32,6 +33,8 @@ export const AppShell: React.FC = () => {
   const { inAppNudge, dismissInAppNudge } = useSmartNudge();
   const [activeView, setActiveView] = useState<AppView>('home');
   const [showSecurityDrawer, setShowSecurityDrawer] = useState(false);
+  // Journal entry targeted by a Mood Constellation star click-through.
+  const [constellationTarget, setConstellationTarget] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     loading: boolean;
     data: any | null;
@@ -82,11 +85,25 @@ export const AppShell: React.FC = () => {
       case 'home':
         return <HomeDashboard onNavigate={setActiveView} />;
       case 'journal':
-        return <JournalDashboard />;
+        return (
+          <JournalDashboard
+            initialEntryId={constellationTarget}
+            onInitialEntryConsumed={() => setConstellationTarget(null)}
+          />
+        );
       case 'reflection':
         return <GuidedReflectionDashboard />;
       case 'patternshift':
         return <PatternShiftDashboard />;
+      case 'constellation':
+        return (
+          <MoodConstellationDashboard
+            onOpenEntry={(entryId) => {
+              if (entryId) setConstellationTarget(entryId);
+              setActiveView('journal');
+            }}
+          />
+        );
       case 'admin':
         return <DemoAdminConsole onGoBack={() => setActiveView('home')} />;
       case 'settings':

@@ -1,10 +1,17 @@
 import React from 'react';
-import { Home, BookOpen, Sparkles, TrendingUp, Settings, LogOut, ShieldCheck } from 'lucide-react';
+import { Home, BookOpen, Sparkles, TrendingUp, Orbit, Settings, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRole } from '../context/RoleContext';
 import { useDemo, useIsDemoSession } from '../demo';
 
-export type AppView = 'home' | 'journal' | 'reflection' | 'patternshift' | 'settings' | 'admin';
+export type AppView =
+  | 'home'
+  | 'journal'
+  | 'reflection'
+  | 'patternshift'
+  | 'constellation'
+  | 'settings'
+  | 'admin';
 
 interface AppSidebarProps {
   activeView: AppView;
@@ -95,6 +102,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ activeView, onViewChange
           label="PatternShift"
           active={activeView === 'patternshift'}
           onClick={() => onViewChange('patternshift')}
+        />
+        <NavItem
+          icon={<Orbit className="nav-icon-svg" />}
+          label="Mood Constellation"
+          active={activeView === 'constellation'}
+          onClick={() => onViewChange('constellation')}
         />
       </nav>
 
