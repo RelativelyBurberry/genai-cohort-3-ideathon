@@ -1,9 +1,10 @@
 import React from 'react';
-import { Home, BookOpen, Sparkles, TrendingUp, Settings, LogOut } from 'lucide-react';
+import { Home, BookOpen, Sparkles, TrendingUp, Settings, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useRole } from '../context/RoleContext';
 import { useDemo, useIsDemoSession } from '../demo';
 
-export type AppView = 'home' | 'journal' | 'reflection' | 'patternshift' | 'settings';
+export type AppView = 'home' | 'journal' | 'reflection' | 'patternshift' | 'settings' | 'admin';
 
 interface AppSidebarProps {
   activeView: AppView;
@@ -13,6 +14,7 @@ interface AppSidebarProps {
 export const AppSidebar: React.FC<AppSidebarProps> = ({ activeView, onViewChange }) => {
   const { user, signOutUser } = useAuth();
   const { isDemoSession, demoUser, exitDemoSession } = useDemo();
+  const { isAdmin } = useRole();
   const isDemo = useIsDemoSession();
 
   const firstName = isDemo
@@ -98,6 +100,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ activeView, onViewChange
 
       {/* Bottom Section */}
       <div className="sidebar-bottom">
+        <NavItem
+          icon={<ShieldCheck className="nav-icon-svg" />}
+          label={isAdmin ? 'Admin Console' : 'Admin Console (Restricted)'}
+          active={activeView === 'admin'}
+          onClick={() => onViewChange('admin')}
+        />
         <NavItem
           icon={<Settings className="nav-icon-svg" />}
           label="Settings"

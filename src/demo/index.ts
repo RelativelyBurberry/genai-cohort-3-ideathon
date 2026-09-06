@@ -29,8 +29,16 @@
 export { 
   isDemoModeEnabled, 
   DEMO_USER, 
+  DEMO_ADMIN_USER,
+  DEMO_ROLES,
+  DEFAULT_DEMO_ROLE,
+  DEMO_ROLE_STORAGE_KEY,
   DEMO_STORAGE_KEY,
-  resetDemoWorkspace 
+  resetDemoWorkspace,
+  loadDemoRole,
+  saveDemoRole,
+  resetDemoRole,
+  type DemoRole,
 } from './demoConfig';
 
 export { 

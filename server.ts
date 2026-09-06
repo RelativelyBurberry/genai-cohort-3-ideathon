@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite';
 import { requireAuth, AuthenticatedRequest, logAuthConfigStartup } from './server/middleware/auth.js';
 import { reflectionRouter } from './server/routes/reflection.js';
 import { patternShiftRouter } from './server/routes/patternShift.js';
+import { adminRouter } from './server/routes/admin.js';
 import { initializeSecretProvider } from './server/config/secrets.js';
 
 // Make debug logs visible to inspection
@@ -106,6 +107,9 @@ app.use(reflectionRouter);
 
 // 4. Milestone 5 PatternShift Longitudinal Insights Routes
 app.use(patternShiftRouter);
+
+// 5. Phase 11 RBAC & Administrative Controls Routes
+app.use(adminRouter);
 
 // Temporary diagnostic collector to record frontend telemetry
 app.post('/api/dev/client-debug', (req, res) => {

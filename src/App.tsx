@@ -1,5 +1,6 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { RoleProvider } from './context/RoleContext';
 import { DemoProvider, useDemo, useIsDemoSession } from './demo';
 import { LandingPage } from './components/landing/LandingPage';
 import { AppShell } from './components/AppShell';
@@ -30,7 +31,9 @@ export default function App() {
   return (
     <AuthProvider>
       <DemoProvider>
-        <AppContent />
+        <RoleProvider>
+          <AppContent />
+        </RoleProvider>
       </DemoProvider>
     </AuthProvider>
   );

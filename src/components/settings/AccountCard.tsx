@@ -1,5 +1,7 @@
 import React from 'react';
+import { ShieldCheck, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useRole } from '../../context/RoleContext';
 import { useDemo, useIsDemoSession } from '../../demo';
 
 /**
@@ -7,6 +9,9 @@ import { useDemo, useIsDemoSession } from '../../demo';
  *
  * Production: renders the authenticated Firebase user.
  * Demo: renders the synthetic demo identity from DemoContext.
+ *
+ * Also displays the resolved role (USER/ADMIN) and access scope,
+ * making the RBAC boundary visible during demos.
  *
  * No authentication logic lives here - it only reads identity state.
  */
@@ -41,6 +46,7 @@ function resolveInitials(name: string): string {
 export const AccountCard: React.FC = () => {
   const { user } = useAuth();
   const { demoUser } = useDemo();
+  const { role, roleResolved } = useRole();
   const isDemo = useIsDemoSession();
 
   const displayName = isDemo
@@ -51,6 +57,12 @@ export const AccountCard: React.FC = () => {
 
   const resolvedName = resolveDisplayName(displayName, email);
   const initials = resolveInitials(resolvedName);
+
+  const isAdmin = role === 'admin';
+  const roleLabel = isAdmin ? 'ADMIN' : 'USER';
+  const accessScope = isAdmin
+    ? 'Administrative demo controls'
+    : 'Personal reflections only';
 
   return (
     <div className="settings-card settings-account-card">
@@ -73,6 +85,19 @@ export const AccountCard: React.FC = () => {
         <p className={`settings-account-status${isDemo ? ' preview' : ''}`}>
           <span className="settings-status-dot" aria-hidden="true" />
           {isDemo ? 'Preview session' : 'Signed in'}
+        </p>
+        <p className={`settings-account-role role-${role.toLowerCase()}`}>
+          {isAdmin ? (
+            <ShieldCheck className="settings-account-role-icon" aria-hidden="true" />
+          ) : (
+            <UserRound className="settings-account-role-icon" aria-hidden="true" />
+          )}
+          <span>
+            <strong>Role: {roleLabel}</strong>
+            <small>
+              Authorization: {roleResolved ? 'Verified' : 'Pending'} · {accessScope}
+            </small>
+          </span>
         </p>
       </div>
     </div>

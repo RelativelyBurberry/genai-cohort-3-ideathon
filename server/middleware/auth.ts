@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { getAdminAuth } from '../firebaseAdmin.js';
 
+export type UserRole = 'user' | 'admin';
+
 export interface AuthenticatedRequest extends Request {
   user?: {
     uid: string;
     email?: string;
+    role?: UserRole;
   };
   token?: string;
 }
@@ -135,4 +138,104 @@ export async function requireAuth(
       message: 'Authentication failed. Please sign in again.',
     });
   }
+}
+
+// ============================================================
+// RBAC: Role Resolution & Admin Authorization
+// ============================================================
+
+/**
+ * Resolves the admin email allowlist from the server-side environment variable.
+ * NEVER VITE_ prefixed. NEVER exposed to the client.
+ * 
+ * Format: ADMIN_EMAIL_ALLOWLIST="admin1@example.com,admin2@example.com"
+ * 
+ * SECURITY: This list is the authoritative source of admin role assignment.
+ * A user's role is determined EXCLUSIVELY by membership in this server-side list.
+ * Absence of entries means ALL authenticated users are regular 'user's.
+ * Absence of the env var means NO users are admins (fail-safe).
+ */
+function getAdminEmailAllowlist(): Set<string> {
+  const raw = process.env.ADMIN_EMAIL_ALLOWLIST;
+  if (!raw || !raw.trim()) {
+    return new Set();
+  }
+  return new Set(
+    raw.split(',')
+      .map(email => email.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+/**
+ * Resolve the role for a verified, authenticated user.
+ * 
+ * SECURITY:
+ * - Role is resolved EXCLUSIVELY from the server-side allowlist.
+ * - The client NEVER provides or controls the role.
+ * - A missing or empty allowlist means ALL authenticated users are 'user'.
+ * - Absence of a role NEVER implies admin access (fail closed).
+ * 
+ * This function MUST be called only after requireAuth has verified
+ * the Firebase ID token and populated req.user.
+ */
+export function resolveUserRole(email: string | undefined | null): UserRole {
+  if (!email) {
+    return 'user';
+  }
+  const allowlist = getAdminEmailAllowlist();
+  return allowlist.has(email.toLowerCase()) ? 'admin' : 'user';
+}
+
+/**
+ * Middleware: requireAdmin
+ * 
+ * Must be used AFTER requireAuth in the middleware chain.
+ * Verifies that the authenticated user has admin privileges
+ * based on server-side role resolution.
+ * 
+ * SECURITY:
+ * - Fails closed: if auth is missing, returns 401
+ * - Fails closed: if role is not admin, returns 403
+ * - Never trusts client-provided role fields
+ * - Never trusts Firestore-writable role fields
+ * - Role is resolved from server-side environment configuration
+ */
+export function requireAdmin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  // Fail closed if authentication context is missing
+  if (!req.user || !req.user.uid) {
+    res.status(401).json({
+      error: 'auth/required',
+      message: 'Authentication required for administrative access.',
+    });
+    return;
+  }
+
+  // Resolve role server-side from verified token email
+  const role = resolveUserRole(req.user.email);
+
+  // Attach resolved role to request
+  req.user.role = role;
+
+  if (role !== 'admin') {
+    // Privacy-safe: do NOT reveal that admin exists or what the allowlist is
+    console.warn('[ADMIN_AUTHORIZATION_DENIED]', {
+      timestamp: new Date().toISOString(),
+      path: req.path,
+      method: req.method,
+      role,
+    });
+
+    res.status(403).json({
+      error: 'auth/forbidden',
+      message: 'Your account does not have permission to access administrative controls.',
+    });
+    return;
+  }
+
+  next();
 }

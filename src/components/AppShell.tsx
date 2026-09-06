@@ -9,6 +9,7 @@ import { JournalDashboard } from './journal/JournalDashboard';
 import { GuidedReflectionDashboard } from './reflection/GuidedReflectionDashboard';
 import { PatternShiftDashboard } from './insights/PatternShiftDashboard';
 import { SettingsView } from './SettingsView';
+import { DemoAdminConsole } from './admin/DemoAdminConsole';
 
 /**
  * AppShell - Editorial sidebar application shell
@@ -83,6 +84,8 @@ export const AppShell: React.FC = () => {
         return <GuidedReflectionDashboard />;
       case 'patternshift':
         return <PatternShiftDashboard />;
+      case 'admin':
+        return <DemoAdminConsole onGoBack={() => setActiveView('home')} />;
       case 'settings':
         return <SettingsView />;
       default:

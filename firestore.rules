@@ -8,8 +8,22 @@ service cloud.firestore {
     }
 
     // 1. User Root Document
+    //
+    // Phase 11 RBAC defense-in-depth:
+    // The authoritative admin role is resolved SERVER-SIDE from the
+    // ADMIN_EMAIL_ALLOWLIST environment variable — never from a
+    // Firestore document. To make privilege escalation impossible in
+    // Firestore too, a user document may NOT carry a 'role' field with
+    // value 'admin'. The only permitted client-writable role value is
+    // 'user' (which is also the default). This is strictly restrictive
+    // (never loosening) and preserves all existing ownership rules.
     match /users/{userId} {
-      allow read, create, update: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && (
+          !('role' in request.resource.data)
+          || request.resource.data.role == 'user'
+        );
       allow delete: if false; // Deletions handled exclusively via backend cascade endpoint
     }
 

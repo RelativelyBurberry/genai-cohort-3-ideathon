@@ -6506,6 +6506,60 @@ textarea.input,
   flex-shrink: 0;
 }
 
+.settings-account-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.625rem 0 0;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  width: fit-content;
+}
+
+.settings-account-role.role-user {
+  background-color: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+}
+
+.settings-account-role.role-admin {
+  background-color: var(--color-primary-soft);
+  border: 1px solid rgba(107, 59, 66, 0.25);
+}
+
+.settings-account-role-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.settings-account-role.role-user .settings-account-role-icon {
+  color: var(--color-muted-foreground);
+}
+
+.settings-account-role span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.settings-account-role strong {
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  color: var(--color-foreground);
+}
+
+.settings-account-role small {
+  font-size: 0.6875rem;
+  color: var(--color-muted-foreground);
+}
+
+.settings-account-role.role-admin strong {
+  color: var(--color-primary);
+}
+
 /* ----------------------------------------------------------------
    Workspace card
    ---------------------------------------------------------------- */
@@ -7445,5 +7499,827 @@ textarea.input,
   .location-picker-spinner,
   .location-picker-spinner-small {
     animation-duration: 2s;
+  }
+}
+
+/* ================================================================
+   PHASE 11 — DEMO RBAC & ADMINISTRATIVE CONTROLS
+   Demo Admin Console + Authorization Boundaries
+   ================================================================ */
+
+/* ----------------------------------------------------------------
+   Admin Console layout
+   ---------------------------------------------------------------- */
+.admin-console {
+  padding: 2rem 0 3rem;
+}
+
+.admin-page-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.admin-console-header {
+  margin-bottom: 2.25rem;
+}
+
+.admin-console-header h1 {
+  font-family: var(--font-serif);
+  font-size: 2.25rem;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  color: var(--color-foreground);
+  margin: 0.25rem 0 0.75rem;
+}
+
+.admin-console-header h1 em {
+  font-style: italic;
+  color: var(--color-primary);
+}
+
+.admin-console-header p:last-child {
+  color: var(--color-muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  max-width: 58ch;
+}
+
+/* ----------------------------------------------------------------
+   Admin cards (shared)
+   ---------------------------------------------------------------- */
+.admin-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-card);
+}
+
+.admin-card-kicker {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-primary);
+  margin: 0 0 0.5rem;
+}
+
+.admin-card-title {
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-foreground);
+  margin: 0 0 0.5rem;
+}
+
+.admin-card-copy {
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0 0 1.25rem;
+}
+
+/* ----------------------------------------------------------------
+   Authorization Status card
+   ---------------------------------------------------------------- */
+.admin-authorization-card {
+  border-left: 3px solid var(--color-primary);
+}
+
+.admin-auth-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.admin-auth-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.admin-auth-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-muted-foreground);
+}
+
+.admin-auth-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.admin-auth-sub {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+
+.admin-auth-value.auth-verified {
+  color: var(--color-success);
+}
+
+.admin-auth-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.admin-auth-value.scope-admin {
+  color: var(--color-primary);
+}
+
+.admin-auth-value.scope-user {
+  color: var(--color-muted-foreground);
+}
+
+.admin-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.3125rem 0.75rem;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.admin-role-user {
+  background-color: var(--color-surface-muted);
+  color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
+}
+
+.admin-role-admin {
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
+  border: 1px solid rgba(107, 59, 66, 0.25);
+}
+
+.admin-auth-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-surface-muted);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--color-muted-foreground);
+}
+
+.admin-auth-note-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+/* ----------------------------------------------------------------
+   Authorization Boundary Demo card
+   ---------------------------------------------------------------- */
+.admin-demo-tests {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-demo-test {
+  padding: 1rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.admin-demo-test-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.875rem;
+}
+
+.admin-demo-test-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.admin-demo-test-label {
+  font-size: 0.875rem;
+  color: var(--color-foreground);
+}
+
+.admin-demo-test-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-demo-test-button-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.admin-demo-test-spinner {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  animation: admin-spin 1s linear infinite;
+}
+
+@keyframes admin-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.admin-demo-result {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.admin-demo-result-allowed {
+  background-color: rgba(90, 122, 94, 0.1);
+  color: var(--color-success);
+  border: 1px solid rgba(90, 122, 94, 0.25);
+}
+
+.admin-demo-result-denied {
+  background-color: rgba(156, 74, 74, 0.08);
+  color: var(--color-danger);
+  border: 1px solid rgba(156, 74, 74, 0.2);
+}
+
+.admin-demo-result-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  flex-shrink: 0;
+}
+
+.admin-demo-boundary {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.75rem 0.25rem 0.25rem;
+}
+
+.admin-demo-boundary-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--color-muted-foreground);
+}
+
+.admin-demo-boundary-line code {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  background-color: var(--color-surface-muted);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-primary);
+}
+
+.admin-demo-boundary-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background-color: var(--color-accent-soft);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.admin-demo-boundary-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* ----------------------------------------------------------------
+   Privacy-safe system overview card
+   ---------------------------------------------------------------- */
+.admin-overview-source {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+  margin: 0 0 0.5rem;
+}
+
+.admin-overview-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-foreground);
+  margin: 1.375rem 0 0.625rem;
+}
+
+.admin-overview-heading-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  color: var(--color-primary);
+}
+
+.admin-overview-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.375rem;
+}
+
+.admin-overview-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+  font-size: 0.875rem;
+  color: var(--color-foreground);
+}
+
+.admin-overview-list-check .admin-overview-item:last-child {
+  border-bottom: 0;
+}
+
+.admin-overview-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-overview-check-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  color: var(--color-success);
+  flex-shrink: 0;
+}
+
+.admin-overview-item-status {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.admin-overview-item-status.ok {
+  background-color: rgba(90, 122, 94, 0.12);
+  color: var(--color-success);
+}
+
+.admin-overview-item-status.off {
+  background-color: rgba(156, 74, 74, 0.08);
+  color: var(--color-danger);
+}
+
+.admin-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+  padding: 1rem 0;
+}
+
+.admin-loading-spinner {
+  width: 1rem;
+  height: 1rem;
+  animation: admin-spin 1s linear infinite;
+}
+
+.admin-error {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  background-color: rgba(156, 74, 74, 0.08);
+  border: 1px solid rgba(156, 74, 74, 0.2);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: 0.875rem;
+}
+
+.admin-error-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-danger);
+  flex-shrink: 0;
+}
+
+/* ----------------------------------------------------------------
+   Security demonstration card
+   ---------------------------------------------------------------- */
+.admin-security-checks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.admin-security-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.admin-security-check-status {
+  width: 1.0625rem;
+  height: 1.0625rem;
+  color: var(--color-success);
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.admin-security-check-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-accent-soft);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.admin-security-check-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.admin-security-check-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.admin-security-check-text strong {
+  font-size: 0.875rem;
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+
+.admin-security-check-text small {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  line-height: 1.5;
+}
+
+.admin-security-privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+  padding: 0.875rem 1rem;
+  background-color: var(--color-primary-soft);
+  border-radius: var(--radius-md);
+}
+
+.admin-security-privacy-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.admin-security-privacy-note p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+}
+
+.admin-security-privacy-note p strong {
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+
+/* ----------------------------------------------------------------
+   Admin console footer
+   ---------------------------------------------------------------- */
+.admin-console-footer {
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  background-color: var(--color-sidebar);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.admin-console-footer-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.admin-console-footer-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.admin-console-footer-badge span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.admin-console-footer-badge strong {
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  color: var(--color-foreground);
+}
+
+.admin-console-footer-badge small {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+}
+
+.admin-console-footer-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-muted-foreground);
+}
+
+/* ----------------------------------------------------------------
+   Demo role switcher (demo sessions only)
+   ---------------------------------------------------------------- */
+.admin-demo-role-switcher {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+}
+
+.admin-demo-role-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-demo-role-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.admin-demo-role-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+}
+
+.admin-demo-role-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+  line-height: 1.5;
+}
+
+.admin-demo-role-toggle {
+  background: none;
+  border: 0;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+}
+
+.admin-demo-role-toggle:hover {
+  color: var(--color-primary);
+}
+
+.admin-demo-role-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.admin-demo-role-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.625rem;
+  margin-top: 0.875rem;
+}
+
+.admin-demo-role-option {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: border-color var(--duration-base) var(--ease-reflectra),
+              background-color var(--duration-base) var(--ease-reflectra);
+}
+
+.admin-demo-role-option:hover:not(.selected) {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface-muted);
+}
+
+.admin-demo-role-option.selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-soft);
+}
+
+.admin-demo-role-option:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.admin-demo-role-option-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.admin-demo-role-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.admin-demo-role-option strong {
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  color: var(--color-foreground);
+}
+
+.admin-demo-role-option small {
+  font-size: 0.6875rem;
+  color: var(--color-muted-foreground);
+}
+
+/* ----------------------------------------------------------------
+   Admin Route Boundary (denied / loading states)
+   ---------------------------------------------------------------- */
+.admin-boundary {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+}
+
+.admin-boundary-card {
+  max-width: 460px;
+  width: 100%;
+  text-align: center;
+  padding: 2.5rem 2rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.admin-boundary-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto 1.25rem;
+  border-radius: 50%;
+  background-color: var(--color-accent-soft);
+  color: var(--color-primary);
+}
+
+.admin-boundary-icon-denied {
+  background-color: rgba(156, 74, 74, 0.1);
+  color: var(--color-danger);
+}
+
+.admin-boundary-icon-svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.admin-boundary-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-danger);
+  margin: 0 0 0.5rem;
+}
+
+.admin-boundary-card h2 {
+  font-family: var(--font-serif);
+  font-size: 1.625rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-foreground);
+  margin: 0 0 0.75rem;
+}
+
+.admin-boundary-card > p:not(.admin-boundary-eyebrow) {
+  color: var(--color-muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  margin: 0 0 1.25rem;
+}
+
+.admin-boundary-details {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding: 0.625rem 0.875rem;
+  background-color: var(--color-surface-muted);
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+}
+
+.admin-boundary-detail-icon {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  color: var(--color-muted-foreground);
+  vertical-align: -0.125rem;
+}
+
+.admin-boundary-details strong {
+  color: var(--color-foreground);
+}
+
+.admin-boundary-detail-divider {
+  color: var(--color-border-strong);
+}
+
+.admin-boundary-back-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.admin-boundary-loading .admin-boundary-icon {
+  background-color: var(--color-surface-muted);
+  color: var(--color-muted-foreground);
+}
+
+/* ----------------------------------------------------------------
+   Phase 11 Responsive
+   ---------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .admin-card {
+    padding: 1.25rem;
+  }
+
+  .admin-console-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .admin-auth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-demo-role-options {
+    grid-template-columns: 1fr;
   }
 }

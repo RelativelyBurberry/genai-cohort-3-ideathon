@@ -3,8 +3,14 @@ import { Timestamp } from 'firebase/firestore';
 import { 
   isDemoModeEnabled, 
   DEMO_USER, 
+  DEMO_ADMIN_USER, 
+  DEMO_ROLE_STORAGE_KEY, 
+  DEFAULT_DEMO_ROLE, 
+  loadDemoRole,
+  saveDemoRole,
   DEMO_STORAGE_KEY, 
-  resetDemoWorkspace as resetDemoStorage 
+  resetDemoWorkspace as resetDemoStorage,
+  type DemoRole, 
 } from './demoConfig';
 import { 
   DEMO_JOURNAL_ENTRIES, 
@@ -15,6 +21,7 @@ import {
 import type { JournalEntry, CreateJournalEntryInput, UpdateJournalEntryInput } from '../types/journal';
 import type { Conversation, ReflectionMessage } from '../types/reflection';
 import type { PatternShiftInsight } from '../types/patternshift';
+import type { UserRole } from '../types/rbac';
 
 /**
  * Demo Context
@@ -44,6 +51,12 @@ interface DemoContextType {
   
   /** Synthetic demo user identity */
   demoUser: typeof DEMO_USER | null;
+  
+  /** Demo role (USER or ADMIN demonstration only) */
+  demoRole: DemoRole;
+  
+  /** Set demo role (DEMONSTRATION ONLY - never affects production authorization) */
+  setDemoRole: (role: DemoRole) => void;
   
   /** Start demo session (called when "Explore Demo" is clicked) */
   startDemoSession: () => void;
@@ -179,11 +192,21 @@ function generateDemoId(): string {
 export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isDemoMode = isDemoModeEnabled();
   const [isDemoSession, setIsDemoSession] = useState(false);
+  const [demoRole, setDemoRoleState] = useState<DemoRole>(DEFAULT_DEMO_ROLE);
   const [workspace, setWorkspace] = useState<DemoWorkspace>({
     journalEntries: [],
     conversations: [],
     messages: {},
   });
+  
+  // Load demo role from localStorage when demo session starts
+  useEffect(() => {
+    if (isDemoMode && isDemoSession) {
+      // Default to user role unless previously switched to admin
+      const savedRole = loadDemoRole();
+      setDemoRoleState(savedRole);
+    }
+  }, [isDemoMode, isDemoSession]);
   
   // Load workspace on mount (only in demo mode)
   useEffect(() => {
@@ -211,6 +234,12 @@ export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const exitDemoSession = useCallback(() => {
     setIsDemoSession(false);
     // Keep workspace in localStorage for next session
+  }, []);
+  
+  const setDemoRole = useCallback((role: DemoRole) => {
+    setDemoRoleState(role);
+    // Persist role selection to localStorage (DEMO ONLY)
+    saveDemoRole(role);
   }, []);
   
   const resetDemoWorkspace = useCallback(() => {
@@ -352,7 +381,9 @@ export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value: DemoContextType = useMemo(() => ({
     isDemoMode,
     isDemoSession,
-    demoUser: isDemoSession ? DEMO_USER : null,
+    demoUser: isDemoSession ? (demoRole === 'admin' ? DEMO_ADMIN_USER : DEMO_USER) : null,
+    demoRole,
+    setDemoRole,
     startDemoSession,
     exitDemoSession,
     resetDemoWorkspace,
@@ -369,6 +400,8 @@ export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }), [
     isDemoMode,
     isDemoSession,
+    demoRole,
+    setDemoRole,
     startDemoSession,
     exitDemoSession,
     resetDemoWorkspace,
