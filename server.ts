@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
+import fs from 'fs';
 import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
@@ -8,6 +9,34 @@ import { requireAuth, AuthenticatedRequest, logAuthConfigStartup } from './serve
 import { reflectionRouter } from './server/routes/reflection.js';
 import { patternShiftRouter } from './server/routes/patternShift.js';
 import { initializeSecretProvider } from './server/config/secrets.js';
+
+// Make debug logs visible to inspection
+const origLog = console.log;
+const origWarn = console.warn;
+const origError = console.error;
+const appendDebugLog = (level: string, ...args: any[]) => {
+  try {
+    const line = `[${new Date().toISOString()}] [${level}] ` + args.map(a => {
+      if (typeof a === 'object') {
+        try { return JSON.stringify(a); } catch { return String(a); }
+      }
+      return String(a);
+    }).join(' ') + '\n';
+    fs.appendFileSync('/tmp/backend_debug.log', line);
+  } catch {}
+};
+console.log = (...args: any[]) => {
+  origLog(...args);
+  appendDebugLog('LOG', ...args);
+};
+console.warn = (...args: any[]) => {
+  origWarn(...args);
+  appendDebugLog('WARN', ...args);
+};
+console.error = (...args: any[]) => {
+  origError(...args);
+  appendDebugLog('ERROR', ...args);
+};
 
 // Initialize secret provider at startup
 initializeSecretProvider();
@@ -77,6 +106,17 @@ app.use(reflectionRouter);
 
 // 4. Milestone 5 PatternShift Longitudinal Insights Routes
 app.use(patternShiftRouter);
+
+// Temporary diagnostic collector to record frontend telemetry
+app.post('/api/dev/client-debug', (req, res) => {
+  try {
+    fs.writeFileSync('/tmp/frontend_debug.json', JSON.stringify(req.body, null, 2));
+    console.log('[CLIENT_TELEMETRY_CAPTURED]', JSON.stringify(req.body));
+  } catch (err: any) {
+    console.error('[CLIENT_TELEMETRY_ERROR]', err?.message);
+  }
+  res.status(200).json({ status: 'ok' });
+});
 
 // Fallback for API routes
 app.all('/api/*', (req, res) => {

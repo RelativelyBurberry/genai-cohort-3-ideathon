@@ -52,7 +52,21 @@ patternShiftRouter.post(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const uid = req.user?.uid;
 
+    console.log('[PATTERNSHIFT ROUTE HIT]', {
+      timestamp: new Date().toISOString(),
+      uid,
+      hasAuth: Boolean(req.headers.authorization),
+      bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : null,
+      entriesCount: Array.isArray(req.body?.analysisPayload?.entries)
+        ? req.body.analysisPayload.entries.length
+        : undefined,
+      conversationsCount: Array.isArray(req.body?.analysisPayload?.completedConversations)
+        ? req.body.analysisPayload.completedConversations.length
+        : undefined,
+    });
+
     if (!uid) {
+      console.log('[PATTERNSHIFT RESPONSE SHAPE] 401 unauthorized');
       res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
       return;
     }
@@ -61,6 +75,7 @@ patternShiftRouter.post(
     // client-read primary flow always supplies it.
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     if (body.analysisPayload === undefined || body.analysisPayload === null) {
+      console.log('[PATTERNSHIFT RESPONSE SHAPE] 400 invalid_analysis_payload (missing analysisPayload)');
       res.status(400).json({
         error: 'invalid_analysis_payload',
         message: 'analysisPayload is required. The frontend must supply its authenticated records for analysis.',
@@ -70,6 +85,7 @@ patternShiftRouter.post(
 
     const payloadValidation = validatePatternShiftAnalysisPayload(body.analysisPayload);
     if (!payloadValidation.valid) {
+      console.log('[PATTERNSHIFT RESPONSE SHAPE] 400 invalid_analysis_payload:', payloadValidation.error);
       res.status(400).json({
         error: 'invalid_analysis_payload',
         message: payloadValidation.error,
@@ -85,6 +101,7 @@ patternShiftRouter.post(
       });
 
       if (!rateLimit.allowed) {
+        console.log('[PATTERNSHIFT RESPONSE SHAPE] 429 rate_limit_exceeded');
         res.status(429).json({
           error: 'rate_limit_exceeded',
           message: `Too many pattern analysis requests. Please retry in ${rateLimit.retryAfterSeconds} seconds.`,
@@ -103,6 +120,10 @@ patternShiftRouter.post(
 
       // 4. Insufficient Data Guard (< 3 meaningful items)
       if (!engineResult.hasSufficientData || !engineResult.metrics) {
+        console.log('[PATTERNSHIFT RESPONSE SHAPE] 200 insufficient_data', {
+          required: engineResult.requiredCount,
+          available: engineResult.availableCount,
+        });
         res.status(200).json({
           status: 'insufficient_data',
           required: engineResult.requiredCount,
@@ -141,6 +162,9 @@ patternShiftRouter.post(
       //    returned ephemerally with explicit persistence metadata.
       try {
         await persistPatternShiftInsight(uid, newInsight);
+        console.log('[PATTERNSHIFT RESPONSE SHAPE] 200 success (persisted: true)', {
+          insightId: newInsight.id,
+        });
         res.status(200).json({
           status: 'success',
           insight: newInsight,
@@ -152,6 +176,10 @@ patternShiftRouter.post(
           console.warn(
             `[PATTERNSHIFT_ANALYZE] insight generated but NOT persisted for user ${uid} (backend Firestore IAM unavailable). Returning insight with persistence metadata.`
           );
+          console.log('[PATTERNSHIFT RESPONSE SHAPE] 200 success (persisted: false)', {
+            insightId: newInsight.id,
+            reason: 'backend_persistence_unavailable',
+          });
           res.status(200).json({
             status: 'success',
             insight: newInsight,
@@ -171,6 +199,7 @@ patternShiftRouter.post(
         typeof err?.message === 'string' && err.message.includes('GEMINI_CONFIGURATION_ERROR');
       if (isGeminiConfigError) {
         console.error('[PATTERNSHIFT_ANALYZE_ERROR] AI configuration error (secret unavailable).');
+        console.log('[PATTERNSHIFT RESPONSE SHAPE] 503 service_unavailable');
         res.status(503).json({
           error: 'service_unavailable',
           message:
@@ -180,6 +209,7 @@ patternShiftRouter.post(
       }
 
       console.error('[PATTERNSHIFT_ANALYZE_ERROR]', err);
+      console.log('[PATTERNSHIFT RESPONSE SHAPE] 500 internal_error');
       res.status(500).json({
         error: 'internal_error',
         message: 'Failed to complete pattern analysis. Please try again later.',

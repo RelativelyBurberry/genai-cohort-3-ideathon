@@ -188,6 +188,12 @@ export function parsePatternShiftApiResponse(
     };
   }
 
+  console.warn('[PATTERNSHIFT DEBUG] Unexpected response format encountered:', {
+    status: response.status,
+    ok: response.ok,
+    json,
+  });
+
   return {
     status: 'error',
     error: 'unexpected_response',
@@ -327,6 +333,37 @@ export async function triggerPatternAnalysis(
     };
   }
 
-  const json = await response.json().catch(() => ({}));
+  const rawBody = await response.text().catch((err: any) => `[FAILED TO READ BODY: ${err?.message}]`);
+  console.log('[PATTERNSHIFT DEBUG] Response received:', {
+    status: response.status,
+    ok: response.ok,
+    contentType: response.headers.get('content-type'),
+    rawBody,
+  });
+
+  let json: any = {};
+  try {
+    json = rawBody ? JSON.parse(rawBody) : {};
+  } catch (parseErr: any) {
+    console.error('[PATTERNSHIFT DEBUG] Failed to parse response as JSON:', parseErr?.message, 'Raw body was:', rawBody);
+    json = {};
+  }
+
+  // Forward diagnostic evidence to make debug logs visible
+  try {
+    fetch('/api/dev/client-debug', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: '/api/patternshift/analyze',
+        status: response.status,
+        ok: response.ok,
+        contentType: response.headers.get('content-type'),
+        rawBody,
+        json,
+      }),
+    }).catch(() => {});
+  } catch {}
+
   return parsePatternShiftApiResponse(response, json);
 }
