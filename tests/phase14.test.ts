@@ -300,3 +300,56 @@ describe('SafeNotificationEvent types', () => {
     });
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* UI Integration Regression Test                                      */
+/* ------------------------------------------------------------------ */
+
+describe('Settings UI Integration', () => {
+  it('NotificationChannelsCard is exported and importable', async () => {
+    // Verify the component exists and can be imported
+    const { NotificationChannelsCard } = await import(
+      '../src/components/settings/NotificationChannelsCard'
+    );
+
+    expect(NotificationChannelsCard).toBeDefined();
+    expect(typeof NotificationChannelsCard).toBe('function');
+  });
+
+  it('SettingsView imports NotificationChannelsCard', async () => {
+    // Read the SettingsView source to verify import
+    const fs = await import('fs');
+    const path = await import('path');
+    
+    const settingsViewPath = path.join(
+      process.cwd(),
+      'src/components/SettingsView.tsx'
+    );
+    
+    const source = fs.readFileSync(settingsViewPath, 'utf-8');
+    
+    // Verify the import statement exists
+    expect(source).toContain("import { NotificationChannelsCard }");
+    
+    // Verify the component is rendered
+    expect(source).toContain('<NotificationChannelsCard />');
+  });
+
+  it('SettingsView renders both notification sections', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    
+    const settingsViewPath = path.join(
+      process.cwd(),
+      'src/components/SettingsView.tsx'
+    );
+    
+    const source = fs.readFileSync(settingsViewPath, 'utf-8');
+    
+    // Verify both notification sections exist
+    expect(source).toContain('Smart reflection reminders');
+    expect(source).toContain('External notifications');
+    expect(source).toContain('NotificationSettingsCard');
+    expect(source).toContain('NotificationChannelsCard');
+  });
+});

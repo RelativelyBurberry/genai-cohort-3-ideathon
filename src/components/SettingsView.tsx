@@ -8,6 +8,7 @@ import { PrivacySection } from './settings/PrivacySection';
 import { SecuritySection } from './settings/SecuritySection';
 import { DemoWorkspaceCard } from './settings/DemoWorkspaceCard';
 import { NotificationSettingsCard } from './settings/NotificationSettingsCard';
+import { NotificationChannelsCard } from './settings/NotificationChannelsCard';
 
 /**
  * SettingsView - Calm, editorial account & preferences area.
@@ -94,6 +95,20 @@ export const SettingsView: React.FC = () => {
             Smart reflection reminders
           </h2>
           <NotificationSettingsCard />
+        </section>
+
+        {/* External Notification Channels (Phase 14) */}
+        <section
+          className="settings-section"
+          aria-labelledby="settings-channels-heading"
+        >
+          <h2
+            id="settings-channels-heading"
+            className="settings-section-heading"
+          >
+            External notifications
+          </h2>
+          <NotificationChannelsCard />
         </section>
 
         {/* Privacy & Data */}
