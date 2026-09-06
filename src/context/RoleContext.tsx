@@ -86,7 +86,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
-      const response = await fetch("/api/auth/role", {
+      const response = await fetch('/api/auth/role', {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -145,7 +145,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({
     // renders directly for demonstrations. It NEVER affects backend authorization:
     // requireAdmin still resolves roles from ADMIN_EMAIL_ALLOWLIST server-side.
     if (isDemoSession) {
-      setRole("admin");
+      setRole('admin');
       setRoleResolved(true);
       return;
     }
