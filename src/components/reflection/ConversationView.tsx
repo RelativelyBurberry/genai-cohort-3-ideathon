@@ -429,7 +429,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
               <Sparkles className="w-3.5 h-3.5 animate-pulse" />
             </div>
             <div className="reflection-typing">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span className="reflection-thinking-dots" aria-hidden="true"><i /><i /><i /></span>
               <span>Reflectra is listening and contemplating your reflection...</span>
             </div>
           </div>

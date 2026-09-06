@@ -7,6 +7,7 @@ import { LandingPrivacy } from './LandingPrivacy';
 import { LandingPhilosophy } from './LandingPhilosophy';
 import { LandingFinalCTA } from './LandingFinalCTA';
 import { LandingFooter } from './LandingFooter';
+import { Reveal } from '../ui/Reveal';
 
 /**
  * Main landing page composition.
@@ -61,7 +62,7 @@ export const LandingPage: React.FC = () => {
 
       <LandingHero onBegin={handleBegin} isAuthenticating={isAuthenticating} />
 
-      <section className="quiet-statement" id="how-it-works" aria-labelledby="quiet-heading">
+      <Reveal as="section" className="quiet-statement" id="how-it-works" aria-labelledby="quiet-heading">
         <p className="landing-eyebrow">The practice of noticing</p>
         <h2 id="quiet-heading">
           Your thoughts are more than
@@ -71,15 +72,23 @@ export const LandingPage: React.FC = () => {
         <p className="quiet-statement-follow">
           Over time, small reflections can reveal rhythms you might otherwise miss.
         </p>
-      </section>
+      </Reveal>
 
-      <LandingExperiences />
+      <Reveal delay={40}>
+        <LandingExperiences />
+      </Reveal>
 
-      <LandingPrivacy />
+      <Reveal delay={60}>
+        <LandingPrivacy />
+      </Reveal>
 
-      <LandingPhilosophy />
+      <Reveal delay={40}>
+        <LandingPhilosophy />
+      </Reveal>
 
-      <LandingFinalCTA onBegin={handleBegin} isAuthenticating={isAuthenticating} />
+      <Reveal delay={40}>
+        <LandingFinalCTA onBegin={handleBegin} isAuthenticating={isAuthenticating} />
+      </Reveal>
 
       <LandingFooter />
     </main>

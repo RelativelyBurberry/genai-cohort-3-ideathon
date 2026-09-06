@@ -5,7 +5,6 @@ import { DemoProvider, useDemo, useIsDemoSession, DEMO_USER } from './demo';
 import { LandingPage } from './components/landing/LandingPage';
 import { AppShell } from './components/AppShell';
 import { SmartNudgeProvider } from './context/SmartNudgeProvider';
-import { Loader2 } from 'lucide-react';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -13,9 +12,15 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div id="loading-state" className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
-        <Loader2 className="w-8 h-8 text-slate-700 animate-spin mb-3" />
-        <p className="text-xs font-mono text-slate-500">Initializing Reflectra security boundary...</p>
+      <div id="loading-state" className="reflectra-boot-loader">
+        <div className="boot-constellation" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+        <p className="boot-copy">Making space for your reflections…</p>
+        <p className="boot-hint">Reflectra · private by design</p>
       </div>
     );
   }

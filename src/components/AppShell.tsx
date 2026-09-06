@@ -10,7 +10,7 @@ import { HomeDashboard } from './HomeDashboard';
 import { JournalDashboard } from './journal/JournalDashboard';
 import { GuidedReflectionDashboard } from './reflection/GuidedReflectionDashboard';
 import { PatternShiftDashboard } from './insights/PatternShiftDashboard';
-import { MoodConstellationDashboard } from './constellation/MoodConstellationDashboard';
+import { ReferenceMoodConstellation } from './constellation/ReferenceMoodConstellation';
 import { SettingsView } from './SettingsView';
 import { DemoAdminConsole } from './admin/DemoAdminConsole';
 
@@ -80,6 +80,13 @@ export const AppShell: React.FC = () => {
     }
   }, [user, isDemo]);
 
+  // When the active view changes, reset the workspace scroll position so the
+  // entering page transition always starts from the top.
+  useEffect(() => {
+    const workspace = document.querySelector<HTMLElement>('.workspace');
+    if (workspace) workspace.scrollTop = 0;
+  }, [activeView]);
+
   const renderActiveView = () => {
     switch (activeView) {
       case 'home':
@@ -97,9 +104,14 @@ export const AppShell: React.FC = () => {
         return <PatternShiftDashboard />;
       case 'constellation':
         return (
-          <MoodConstellationDashboard
-            onOpenEntry={(entryId) => {
-              if (entryId) setConstellationTarget(entryId);
+          <ReferenceMoodConstellation
+            entries={[]}
+            onOpenReflection={(entryId) => {
+              // 'new-reflection' is the write-CTA sentinel from the reference;
+              // jump to the journal editor without targeting an entry.
+              if (entryId && entryId !== 'new-reflection') {
+                setConstellationTarget(entryId);
+              }
               setActiveView('journal');
             }}
           />
@@ -193,7 +205,11 @@ export const AppShell: React.FC = () => {
 
         {/* Active Workspace */}
         <main className="workspace" role="main">
-          {renderActiveView()}
+          {/* Keyed wrapper remounts on view change so the entering page plays
+              the reflectra page-entrance choreography. */}
+          <div key={activeView} className="view-transition">
+            {renderActiveView()}
+          </div>
         </main>
 
         {/* In-App Smart Nudge Fallback Banner (Phase 13) */}

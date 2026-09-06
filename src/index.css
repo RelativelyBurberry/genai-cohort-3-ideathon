@@ -9622,3 +9622,571 @@ textarea.input,
   }
 }
 
+
+/* ============================================================
+   PHASE 22 — GLOBAL MOTION SYSTEM
+   A single, coherent motion language across Reflectra:
+     micro 160–250ms · component 300–500ms · page 500–800ms ·
+     ambient 4–12s, always driven by --ease-reflectra curves.
+   GPU-friendly properties only (transform / opacity / stroke-dash*).
+   Entire system collapses under prefers-reduced-motion.
+   ============================================================ */
+
+:root {
+  /* Extended timing scale */
+  --duration-micro: 160ms;
+  --duration-component: 420ms;
+  --duration-page: 620ms;
+  --duration-ambient: 6s;
+  --ease-reflectra-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-reflectra-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ----------------------------------------------------------------
+   Keyframes — the motion vocabulary
+   ---------------------------------------------------------------- */
+@keyframes reflectra-fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes reflectra-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes reflectra-scale-in {
+  from { opacity: 0; transform: scale(0.965); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes reflectra-view-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes reflectra-tooltip-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 12px)) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, calc(-100% - 21px)) scale(1); }
+}
+@keyframes reflectra-draw-line {
+  from { stroke-dashoffset: 1200; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes reflectra-line-out {
+  to { opacity: 0; }
+}
+@keyframes reflectra-star-enter {
+  from { opacity: 0; transform: scale(0.55); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes reflectra-halo-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.14); }
+}
+@keyframes reflectra-breathe {
+  0%, 100% { opacity: 0.92; }
+  50%      { opacity: 1; }
+}
+@keyframes reflectra-drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -14px, 0); }
+}
+@keyframes reflectra-paper-drift-back {
+  0%, 100% { transform: rotate(10deg) translateY(0); }
+  50%      { transform: rotate(10.4deg) translateY(-7px); }
+}
+@keyframes reflectra-paper-drift-mid {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  50%      { transform: rotate(-6.4deg) translateY(-7px); }
+}
+@keyframes reflectra-paper-drift-front {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-7px); }
+}
+@keyframes reflectra-grain-shift {
+  from { background-position: 0 0; }
+  to   { background-position: 128px 96px; }
+}
+@keyframes reflectra-shimmer {
+  from { background-position: -180% 0; }
+  to   { background-position: 180% 0; }
+}
+@keyframes reflectra-pulse-dot {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50%      { opacity: 1; transform: scale(1); }
+}
+@keyframes reflectra-spinner-constellation {
+  0%   { transform: rotate(0deg) scale(0.8); opacity: 0.5; }
+  100% { transform: rotate(360deg) scale(1); opacity: 1; }
+}
+@keyframes reflectra-bars-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* ----------------------------------------------------------------
+   Page transitions — every major view enters the same way
+   ---------------------------------------------------------------- */
+.view-transition {
+  animation: reflectra-view-enter var(--duration-page) var(--ease-reflectra) both;
+}
+
+/* ----------------------------------------------------------------
+   Scroll reveals (used via <Reveal />)
+   ---------------------------------------------------------------- */
+.r-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.6s var(--ease-reflectra),
+    transform 0.6s var(--ease-reflectra);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.r-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ============================================================
+   MOOD CONSTELLATION — SHOWSTOPPER CHOREOGRAPHY
+   Everything mounts with the view, so these run once per visit.
+   ============================================================ */
+.constellation-header {
+  animation: reflectra-fade-up 0.55s var(--ease-reflectra) both;
+}
+.constellation-panel {
+  animation: reflectra-fade-up 0.5s 0.08s var(--ease-reflectra) both;
+}
+.constellation-panel-top {
+  animation: reflectra-fade-in 0.5s 0.24s ease both;
+}
+.constellation-stage {
+  animation: reflectra-fade-in 0.75s 0.28s var(--ease-reflectra) both;
+}
+.mood-labels {
+  animation: reflectra-fade-in 0.6s 0.45s ease both;
+}
+.time-edge {
+  animation: reflectra-fade-in 0.6s 0.5s ease both;
+}
+.constellation-legend {
+  animation: reflectra-fade-in 0.5s 0.6s ease both;
+}
+.constellation-insights {
+  animation: reflectra-fade-up 0.55s 0.7s var(--ease-reflectra) both;
+}
+.constellation-empty {
+  animation: reflectra-fade-up 0.55s 0.7s var(--ease-reflectra) both;
+}
+
+/* Connection lines: stroke-draw in after the panel settles. */
+.constellation-line {
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: reflectra-draw-line 0.95s var(--ease-reflectra) 0.4s forwards;
+}
+.constellation-line.is-leaving {
+  animation: reflectra-line-out 0.26s ease forwards;
+}
+
+/* Nodes: emerge one by one, chronologically (DOM order = time order). */
+.constellation-star {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: reflectra-star-enter 0.75s var(--ease-reflectra) both;
+  animation-delay: calc(0.34s + var(--star-index, 0) * 70ms);
+}
+/* Ambient halos breathe very slowly after the entrance settles. */
+.constellation-star circle:first-child {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: reflectra-halo-breathe 7.5s ease-in-out infinite;
+  animation-delay: calc(1.4s + var(--star-index, 0) * 70ms);
+}
+
+/* Tooltip: polished, animated entrance on each hover/focus. */
+.constellation-tooltip {
+  animation: reflectra-tooltip-in 0.28s var(--ease-reflectra) both;
+}
+
+/* Constellation loading state → gentle rising stars, not a spinner. */
+.constellation-stage-loading::before,
+.constellation-stage-loading::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fffaf4, #c6a56e);
+  opacity: 0.7;
+}
+.constellation-stage-loading::before {
+  width: 14px; height: 14px;
+  animation: reflectra-pulse-dot 2.4s ease-in-out infinite;
+}
+.constellation-stage-loading::after {
+  width: 9px; height: 9px;
+  animation: reflectra-pulse-dot 2.4s 0.4s ease-in-out infinite;
+}
+
+/* ============================================================
+   LANDING — CINEMATIC ENTRANCE
+   "The interface is slowly revealing itself rather than loading."
+   ============================================================ */
+.landing-shell {
+  position: relative;
+  animation: reflectra-fade-in 0.8s ease both;
+}
+/* Ambient grain wash — barely perceptible, breathes slowly. */
+.landing-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  animation: reflectra-grain-shift 14s steps(2) infinite, reflectra-breathe 9s ease-in-out 1.6s infinite;
+}
+
+/* Nav: enters first. */
+.landing-nav {
+  animation: reflectra-fade-in 0.7s ease 0.05s both;
+}
+
+/* Hero copy: eyebrow → title → supporting copy → CTA. */
+.landing-hero .hero-copy > * {
+  animation: reflectra-fade-up 0.65s var(--ease-reflectra) both;
+}
+.landing-hero .hero-copy > *:nth-child(1) { animation-delay: 0.12s; }
+.landing-hero .hero-copy > *:nth-child(2) { animation-delay: 0.24s; }
+.landing-hero .hero-copy > *:nth-child(3) { animation-delay: 0.4s; }
+.landing-hero .hero-copy > *:nth-child(4) { animation-delay: 0.56s; }
+
+/* Hero art: drifts in later, papers float almost imperceptibly. */
+.landing-hero .hero-art {
+  animation: reflectra-fade-in 1.1s ease 0.5s both;
+}
+.landing-hero .paper-back {
+  animation: reflectra-paper-drift-back 13s ease-in-out 2.5s infinite;
+}
+.landing-hero .paper-mid {
+  animation: reflectra-paper-drift-mid 15s ease-in-out 2.8s infinite;
+}
+.landing-hero .paper-front {
+  animation: reflectra-paper-drift-front 17s ease-in-out 3s infinite;
+}
+
+/* Landing CTA buttons get the global hover/press treatment. */
+.landing-button {
+  transition:
+    transform 0.25s var(--ease-reflectra),
+    background-color var(--duration-base) var(--ease-reflectra),
+    box-shadow var(--duration-base) var(--ease-reflectra);
+}
+.landing-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(65, 42, 36, 0.16);
+}
+.landing-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Experience pattern bars: quietly draw upward once scrolled into view. */
+.r-reveal .pattern-lines i {
+  transform: scaleY(0);
+  transform-origin: bottom;
+}
+.r-reveal.is-visible .pattern-lines i {
+  animation: reflectra-bars-grow 0.7s var(--ease-reflectra) forwards;
+}
+.r-reveal.is-visible .pattern-lines i:nth-child(2) { animation-delay: 0.07s; }
+.r-reveal.is-visible .pattern-lines i:nth-child(3) { animation-delay: 0.14s; }
+.r-reveal.is-visible .pattern-lines i:nth-child(4) { animation-delay: 0.21s; }
+.r-reveal.is-visible .pattern-lines i:nth-child(5) { animation-delay: 0.28s; }
+
+/* ============================================================
+   HOME DASHBOARD — PROGRESSIVE REVEAL
+   Header → cards → recent moments; gentle card hover.
+   ============================================================ */
+.home-dashboard .home-header {
+  animation: reflectra-fade-up 0.55s var(--ease-reflectra) both;
+}
+.home-dashboard .today-reflection-card {
+  animation: reflectra-fade-up 0.5s 0.1s var(--ease-reflectra) both;
+}
+.home-dashboard .rhythm-card {
+  animation: reflectra-fade-up 0.5s 0.22s var(--ease-reflectra) both;
+}
+.home-dashboard .recent-reflections {
+  animation: reflectra-fade-up 0.55s 0.34s var(--ease-reflectra) both;
+}
+
+/* Week dots reveal in sequence. */
+.home-dashboard .week-dots > div {
+  animation: reflectra-scale-in 0.4s var(--ease-reflectra) both;
+}
+.home-dashboard .week-dots > div:nth-child(1) { animation-delay: 0.55s; }
+.home-dashboard .week-dots > div:nth-child(2) { animation-delay: 0.62s; }
+.home-dashboard .week-dots > div:nth-child(3) { animation-delay: 0.69s; }
+.home-dashboard .week-dots > div:nth-child(4) { animation-delay: 0.76s; }
+.home-dashboard .week-dots > div:nth-child(5) { animation-delay: 0.83s; }
+.home-dashboard .week-dots > div:nth-child(6) { animation-delay: 0.9s; }
+.home-dashboard .week-dots > div:nth-child(7) { animation-delay: 0.97s; }
+
+/* Card polish: soft border tint + gentle lift (composes with .card rules). */
+.card,
+.entry-preview {
+  border-color: var(--color-border);
+  transition:
+    box-shadow var(--duration-base) var(--ease-reflectra),
+    transform var(--duration-base) var(--ease-reflectra),
+    border-color var(--duration-base) var(--ease-reflectra);
+}
+.entry-preview {
+  border-radius: var(--radius-lg);
+}
+.entry-preview:hover {
+  box-shadow: var(--shadow-elevated);
+  transform: translateY(-2px);
+  border-color: var(--color-border-strong);
+}
+
+/* ============================================================
+   PATTERNSHIFT — SUBTLE REVEALS
+   Results and cards enter as they resolve, never popping.
+   ============================================================ */
+.patternshift-overview,
+.patternshift-eyebrow,
+.patternshift-header {
+  animation: reflectra-fade-up 0.45s var(--ease-reflectra) both;
+}
+.patternshift-signal-card,
+.patternshift-rhythm-card {
+  animation: reflectra-fade-up 0.5s 0.06s var(--ease-reflectra) both;
+}
+.patternshift-evo,
+.patternshift-correlations,
+.patternshift-locations,
+.patternshift-unusual,
+.patternshift-themes {
+  animation: reflectra-fade-up 0.5s 0.12s var(--ease-reflectra) both;
+}
+/* Analysing state: a soft drawing pulse instead of a hard spinner. */
+.patternshift-analyzing-icon {
+  animation: reflectra-breathe 1.6s ease-in-out infinite;
+}
+
+/* ============================================================
+   REFLECTION & JOURNAL — CALM, RESPONSIVE INTERACTIONS
+   ============================================================ */
+/* Editorial inputs: soft border + ambient glow on focus, no harsh outline. */
+.journal-compose input,
+.journal-compose textarea,
+.prompt-modal textarea,
+.reflection-MessageInput textarea,
+.guided-message-input textarea,
+textarea.reflection-input {
+  transition:
+    border-color var(--duration-base) var(--ease-reflectra),
+    box-shadow var(--duration-base) var(--ease-reflectra),
+    background-color var(--duration-base) var(--ease-reflectra);
+}
+.journal-compose input:focus,
+.journal-compose textarea:focus,
+.prompt-modal textarea:focus,
+.reflection-MessageInput textarea:focus,
+.guided-message-input textarea:focus,
+textarea.reflection-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(199, 135, 125, 0.18), 0 4px 14px rgba(65, 42, 36, 0.06);
+  background-color: #fffdfa;
+}
+
+/* Buttons: subtle press feedback everywhere. */
+.btn:active:not(:disabled),
+.landing-button:active:not(:disabled),
+.constellation-empty button:active,
+.constellation-empty-btn:active {
+  transform: translateY(0) scale(0.985);
+}
+.btn:focus-visible,
+.landing-button:focus-visible,
+.constellation-empty button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+/* Conversation messages: gentle entrance, newest last. */
+.reflection-message {
+  animation: reflectra-fade-up 0.4s var(--ease-reflectra) both;
+}
+/* Assistant "thinking" indicator: three pulsing dots. */
+.reflection-thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.reflection-thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: reflectra-pulse-dot 1.4s ease-in-out infinite;
+}
+.reflection-thinking-dots i:nth-child(2) { animation-delay: 0.18s; }
+.reflection-thinking-dots i:nth-child(3) { animation-delay: 0.36s; }
+
+/* ============================================================
+   LOADING STATES — REFLECTRA THEMED
+   ============================================================ */
+/* App boot loader (used in App.tsx) */
+.reflectra-boot-loader {
+  min-height: 100vh;
+  background-color: var(--color-background);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+.reflectra-boot-loader .boot-constellation {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+.reflectra-boot-loader .boot-constellation i {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+.reflectra-boot-loader .boot-constellation i:nth-child(1) {
+  width: 12px; height: 12px; left: 26px; top: 4px;
+  animation: reflectra-pulse-dot 2s ease-in-out infinite;
+}
+.reflectra-boot-loader .boot-constellation i:nth-child(2) {
+  width: 8px; height: 8px; left: 8px; top: 26px;
+  animation: reflectra-pulse-dot 2s 0.33s ease-in-out infinite;
+}
+.reflectra-boot-loader .boot-constellation i:nth-child(3) {
+  width: 9px; height: 9px; left: 46px; top: 30px;
+  animation: reflectra-pulse-dot 2s 0.66s ease-in-out infinite;
+}
+.reflectra-boot-loader .boot-constellation i:nth-child(4) {
+  width: 10px; height: 10px; left: 18px; top: 48px;
+  animation: reflectra-pulse-dot 2s 0.99s ease-in-out infinite;
+}
+.reflectra-boot-loader .boot-copy {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  animation: reflectra-breathe 3.4s ease-in-out infinite;
+}
+.reflectra-boot-loader .boot-hint {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--color-subtle-foreground, #a3958e);
+}
+
+/* Home skeleton shimmer (matches journal skeleton language). */
+.loading-skeleton > div {
+  position: relative;
+  overflow: hidden;
+}
+.loading-skeleton > div::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 250, 244, 0.6),
+    transparent
+  );
+  background-size: 180% 100%;
+  animation: reflectra-shimmer 1.8s ease-in-out infinite;
+}
+
+/* ============================================================
+   MICROINTERACTIONS — PHYSICAL CONSISTENCY
+   ============================================================ */
+/* Sidebar active indicator: animated in, calm. */
+.nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--color-accent);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition: opacity 0.25s var(--ease-reflectra), transform 0.25s var(--ease-reflectra);
+}
+.nav-item.nav-item-active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+.nav-item {
+  position: relative;
+}
+
+/* Mobile nav drawer: eased entrance. */
+.mobile-nav-drawer {
+  animation: reflectra-fade-up 0.3s var(--ease-reflectra) both;
+}
+
+/* Modal backdrop + dialogs. */
+.modal-backdrop {
+  animation: reflectra-fade-in 0.25s ease both;
+}
+.modal-backdrop .prompt-modal,
+.modal-backdrop > div,
+.encrypted-export-modal {
+  animation: reflectra-scale-in 0.32s var(--ease-reflectra) both;
+}
+
+/* Dropdowns / selects: fade + slight translate. */
+select,
+input[type='date'],
+input[type='time'] {
+  transition:
+    border-color var(--duration-base) var(--ease-reflectra),
+    box-shadow var(--duration-base) var(--ease-reflectra);
+}
+
+/* Generic tooltip polish. */
+[role='tooltip'],
+.tooltip {
+  animation: reflectra-scale-in 0.22s var(--ease-reflectra) both;
+}
+
+/* ============================================================
+   REDUCED MOTION — everything collapses to instantly visible.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+  .r-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .landing-shell::after,
+  .home-dashboard .week-dots > div,
+  .reflection-thinking-dots i,
+  .reflectra-boot-loader .boot-copy,
+  .constellation-star circle:first-child,
+  .landing-hero .paper-back,
+  .landing-hero .paper-mid,
+  .landing-hero .paper-front {
+    animation: none !important;
+  }
+}
