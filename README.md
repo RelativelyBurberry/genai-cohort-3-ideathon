@@ -1,241 +1,371 @@
-# Reflectra
+<div align="center">
 
-> Production-grade, privacy-first personal reflection and journaling application with AI-powered insight synthesis.
+# ✦ Reflectra
 
-<!-- Challenge Verification Label -->
-`dev-tutorial=cloud-run-ai-challenge`
+### *Intelligence that honors the human journey.*
+
+A privacy-first reflective intelligence platform that helps people understand the patterns emerging across their journal entries, guided conversations, and emotional rhythms.
+
+<br/>
+
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
+[![Firebase](https://img.shields.io/badge/Firebase-Authentication_%26_Firestore-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com)
+[![Cloud Run](https://img.shields.io/badge/Google_Cloud-Cloud_Run-4285F4?style=flat-square&logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
+[![Gemini](https://img.shields.io/badge/Google-Gemini_AI-8E75B2?style=flat-square&logo=googlegemini&logoColor=white)](https://ai.google.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+
+**Reflect. Connect. Understand.**
+
+</div>
 
 ---
 
-## 1. Application Architecture
+## The idea
 
-Reflectra follows a strict decoupled full-stack architecture:
+Most journaling applications preserve moments.
 
-- **Frontend**: React 19 Single Page Application (Vite, Tailwind CSS, Lucide icons, Motion).
-- **Backend**: Express API server running on port 3000 (`0.0.0.0:3000`).
-  - In development: Integrated via Vite middleware mode.
-  - In production: Single bundled CommonJS binary (`dist/server.cjs`) serving static assets and handling `/api/*` requests.
-- **Authentication**: Firebase Authentication with Google Sign-In on client; backend verification enforced via Firebase Admin SDK.
-- **Persistence**: Google Cloud Firestore with granular, collection-level path-scoped security rules under `/users/{uid}/...`.
-- **AI Synthesis**: Server-side Gemini API proxy for reflections, conversation summarization, and pattern shift analysis. Gemini credentials are never exposed to the client.
+**Reflectra connects them.**
 
+It is designed around a simple belief: meaningful self-understanding should emerge from *your own history*, not from opaque scores or black-box labels. Reflectra combines guided reflection, longitudinal pattern analysis, deterministic intelligence primitives, and privacy-conscious architecture to help users notice how their emotional landscape evolves over time.
+
+> *A reflection is a moment. A pattern is a story.*
+
+---
+
+# ✦ Mood Constellation
+
+### *Every reflection leaves a point in your story.*
+
+Mood Constellation transforms a reflection history into a living emotional atlas.
+
+Rather than reducing a person to a chart, it maps individual reflections across two intuitive dimensions:
+
+- **Earlier → Recent** — when moments occurred
+- **Heavy → Radiant** — how they felt
+
+Shared themes create subtle connections, allowing clusters and recurring threads to emerge naturally.
+
+<p align="center">
+  <img src="assets/mood-constellation.gif" alt="Reflectra Mood Constellation animation" width="50%" />
+</p>
+
+### Why it matters
+
+A timeline tells you **what happened**.
+
+A constellation helps you notice **what connects**.
+
+Mood Constellation is intentionally deterministic and privacy-conscious:
+
+- No embeddings
+- No vector database
+- No hidden similarity scores
+- No force-directed randomness
+- No raw journal text rendered into visualization metadata
+
+Connections are derived from explainable signals such as **shared normalized tags and temporal proximity**.
+
+---
+
+# ✦ PatternShift Intelligence
+
+### *Understanding the whole narrative, not just moments.*
+
+PatternShift analyzes longitudinal reflection data to surface meaningful changes across time.
+
+It combines deterministic analysis with Gemini-powered narrative observations, helping users explore questions such as:
+
+- How has my mood trajectory changed?
+- Which themes are becoming more prominent?
+- When do I tend to reflect?
+- Are there unusual changes in my rhythm?
+- What patterns persist across different periods?
+
+<p align="center">
+  <img src="assets/patternshift-intelligence-showcase.png" alt="Reflectra PatternShift Intelligence" width="50%" />
+</p>
+
+## Intelligence with evidence
+
+Reflectra does not treat AI output as unquestionable truth.
+
+Its analysis layer is built around deterministic metrics and evidence structures that can communicate:
+
+- sample size
+- confidence
+- time range
+- aggregate breakdowns
+- the reasoning behind an observed pattern
+
+Gemini is used to help articulate observations from sanitized analytical context — **not as a replacement for the underlying evidence layer**.
+
+---
+
+# ✦ A Secure, User-Isolated Architecture
+
+Reflectra separates client experience, protected backend orchestration, AI analysis, and private user storage.
+
+<p align="center">
+  <img src="assets/reflectra-architecture-diagram.png" alt="Reflectra Secure Data Flow Architecture" width="50%" />
+</p>
+
+### Data flow
+
+```text
+User
+  │
+  ▼
+Firebase Authentication
+  │
+  ▼
+React + TypeScript Client
+  │  authenticated + owner-scoped requests
+  ▼
+Cloud Run Secure Backend
+  ├──────────────► Gemini AI
+  │                  sanitized analytical context
+  │
+  └──────────────► PatternShift Intelligence
+                     deterministic analysis
+  │
+  ▼
+Private Firestore Workspace
 ```
-┌────────────────────────────────────────────────────────┐
-│                   Browser Client                       │
-│  React 19 SPA (Google Sign-In, Client-side Firestore)  │
-└──────────────────────────┬─────────────────────────────┘
-                           │ HTTPS (Bearer ID Token)
-                           ▼
-┌────────────────────────────────────────────────────────┐
-│                   Cloud Run Service                    │
-│            Express API Backend (:3000)                 │
-│  ├── Observability (Privacy-Safe Metadata Logging)     │
-│  ├── Auth Boundary (RS256 ID Token Verification)       │
-│  ├── Distributed Rate Limiter (Firestore Transactions) │
-│  └── Gemini AI Proxy (Server-side API calls)           │
-└──────────────────────────┬─────────────────────────────┘
-                           │
-             ┌─────────────┴─────────────┐
-             ▼                           ▼
-┌─────────────────────────┐ ┌─────────────────────────┐
-│     Cloud Firestore     │ │       Gemini API        │
-│   (/users/{uid}/...)    │ │ (Server-to-Server calls)│
-└─────────────────────────┘ └─────────────────────────┘
+
+Every user workspace is isolated through authenticated, owner-scoped access patterns.
+
+---
+
+# ✦ Zero-Knowledge Encrypted Export
+
+### *Your reflections. Your passphrase. Your device.*
+
+Reflectra includes a client-side encrypted export system designed around a zero-knowledge principle.
+
+<p align="center">
+  <img src="assets/encrypted-export.gif" alt="Reflectra Zero Knowledge Encrypted Export animation" width="50%" />
+</p>
+
+### Encryption happens locally
+
+```text
+Reflection Data
+      │
+      ▼
+Local Serialization
+      │
+      ▼
+PBKDF2-SHA-256
+600,000 iterations
+Fresh 16-byte salt
+      │
+      ▼
+AES-256-GCM
+Fresh 12-byte IV
+      │
+      ▼
+Encrypted .reflectra backup
+```
+
+### What never leaves the device
+
+- Encryption passphrase
+- Derived cryptographic key
+- Plaintext export payload
+- Raw journal/reflection content during encryption
+
+The backend receives **no new plaintext export data** because encryption happens entirely inside the authenticated client.
+
+> **The passphrase never leaves the device.**
+
+<p align="center">
+  <img src="assets/zero-knowledge-export-security.png" alt="Reflectra Zero Knowledge Export" width="50%" />
+</p>
+
+---
+
+# ✦ Guided Reflection
+
+Reflectra is not only a place to write.
+
+It is a space to think.
+
+Guided multi-turn conversations provide a structured reflection experience while preserving a clear boundary between:
+
+- the user's private raw content
+- deterministic analytical signals
+- sanitized context used for AI-assisted observations
+
+Conversations and journal entries become part of a broader longitudinal workspace, allowing insights to develop across time instead of existing as isolated interactions.
+
+---
+
+# ✦ External Notifications
+
+Reflection does not always happen on schedule.
+
+Reflectra supports notification integrations designed to reconnect users with their reflective practice without turning the experience into an attention trap.
+
+### Available channels
+
+- ✉️ Email notifications
+- 💬 Discord webhook integration
+- 🧠 Context-aware smart nudges
+
+The notification architecture maintains strict identity separation:
+
+- authenticated email identity is verified independently
+- authorization allowlists are not reused for notification routing
+- background jobs fall back safely to owner profile data
+- persistence operations handle constrained backend environments gracefully
+
+---
+
+# ✦ Demo Mode
+
+Reflectra includes a dedicated demo workspace for safe product demonstrations.
+
+Demo mode:
+
+- uses deterministic local fixtures
+- mirrors production service interfaces
+- avoids production Firestore writes
+- avoids backend API calls
+- produces reproducible visualizations
+- allows judges to explore core flows safely
+
+The Mood Constellation is especially suited for demos: the same fixture dataset produces the same constellation on every reload.
+
+---
+
+# ✦ Technology
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 19 + TypeScript + Vite |
+| **Styling** | Tailwind CSS v4 + custom design system |
+| **Authentication** | Firebase Authentication |
+| **Database** | Cloud Firestore |
+| **Backend** | Express on Google Cloud Run |
+| **AI** | Google Gemini API |
+| **Secrets** | Google Cloud Secret Manager |
+| **Visualization** | Deterministic SVG |
+| **Testing** | Vitest |
+| **Encryption** | Web Crypto API · PBKDF2 · AES-256-GCM |
+
+---
+
+# ✦ Design Principles
+
+Reflectra is guided by a few architectural principles:
+
+### 01 — Privacy before convenience
+Sensitive reflection content should not travel farther than necessary.
+
+### 02 — Deterministic before speculative
+If an insight can be calculated transparently, it should not require opaque inference.
+
+### 03 — Evidence before assertion
+Patterns should have understandable analytical grounding.
+
+### 04 — AI as interpretation, not authority
+Gemini helps articulate patterns; deterministic analysis provides the structure beneath them.
+
+### 05 — The user's history belongs to the user
+Private workspaces, owner-scoped access, and encrypted exports reinforce this principle throughout the system.
+
+---
+
+# ✦ Project Structure
+
+```text
+reflectra/
+│
+├── src/
+│   ├── components/             # Application UI
+│   ├── intelligence/
+│   │   ├── patternAnalysis/    # Deterministic PatternShift primitives
+│   │   └── moodConstellation/  # Constellation transformation + layout
+│   ├── services/               # Client data access
+│   ├── demo/                   # Isolated demo workspace
+│   └── utils/
+│
+├── server/
+│   ├── services/
+│   │   ├── geminiService.ts
+│   │   ├── notificationIntegrationService.ts
+│   │   └── privilegedPersistence.ts
+│   └── routes/
+│
+├── tests/
+│
+└── firestore.rules
 ```
 
 ---
 
-## 2. Security Architecture
+# ✦ Running Locally
 
-### Authentication & Identity Boundary
-- Every protected backend route enforces `requireAuth` middleware (`server/middleware/auth.ts`).
-- Authenticated user identity (UID) is derived **exclusively from verified Firebase ID tokens**. Client-supplied UIDs in request bodies or parameters are strictly distrusted and rejected.
-- Short-lived ID tokens are validated cryptographically against Google's public RS256 x509 certificates, verifying issuer, audience (`industrious-edge-9xhgq`), and expiration.
-
-### Deployment Requirement & Security Invariant: Token Revocation Checking
-> **Security Invariant**:
-> "Production deployments MUST enable `FIREBASE_CHECK_REVOKED=true` and provide a Cloud Run service identity with the required Firebase/Identity Toolkit permissions for the `industrious-edge-9xhgq` project. `FIREBASE_CHECK_REVOKED=false` is permitted only for the constrained AI Studio Preview environment and MUST NOT be silently used as a production fallback."
-
-- **Production Mode (`FIREBASE_CHECK_REVOKED=true`)**: Verifies token revocation status via the Google Cloud Identity Toolkit API (`verifyIdToken(token, true)`). If revoked or disabled, requests are rejected with HTTP 401. If an internal configuration/credential error occurs, authentication fails safely with HTTP 401 rather than weakening security.
-- **Preview Compatibility Mode (`FIREBASE_CHECK_REVOKED=false`)**: Configured specifically in AI Studio Preview where ambient Application Default Credentials (ADC) belong to the hosting project (`413982939225`) and cannot query the Identity Toolkit API for project `industrious-edge-9xhgq`. All cryptographic token claims (RS256 signature, issuer, audience, and expiration) remain fully verified.
-
-### Firestore Data Isolation
-- Default deny-all security model (`firestore.rules`).
-- All user content is partitioned strictly under `/users/{uid}/`:
-  - `/users/{uid}/entries/{entryId}`: Personal journal entries.
-  - `/users/{uid}/conversations/{conversationId}`: Guided reflection sessions.
-  - `/users/{uid}/conversations/{conversationId}/messages/{messageId}`: Session message transcripts.
-  - `/users/{uid}/insights/{insightId}`: PatternShift intelligence records.
-  - `/users/{uid}/limits/ai_ratelimit`: Distributed rate limit tracking (inaccessible to clients).
-- Message immutability and provenance: Clients may only write messages with `role == "user"`. Assistant responses are persisted exclusively by the backend service.
-- Field protection: Sensitive metadata fields (`summary`, `summaryUpdatedAt`, `status`) cannot be modified by clients.
-
-### Backend-Owned Persistence Authority Matrix
-
-Reflectra separates **user-authorized operations** (allowed by Firestore rules for the token holder) from **backend-owned writes** (denied by Firestore rules when authenticated as a user; require privileged server identity):
-
-| Operation | Authority | Transport | Notes |
-|---|---|---|---|
-| Read `/users/{uid}/conversations/{cid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)` |
-| Read `/users/{uid}/conversations/{cid}/messages/{mid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)` |
-| Read `/users/{uid}/entries/{eid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)` |
-| Read `/users/{uid}/insights/{iid}` | USER-AUTHORIZED READ | User ID token over REST (Admin SDK fallback) | Rules: `allow read: if isOwner(userId)`, `allow write: if false` |
-| Delete conversation + subcollection | USER-AUTHORIZED DELETE | User ID token over REST (Admin SDK fallback) | Rules: `allow delete: if isOwner(userId)` |
-| Create `/users/{uid}/entries/{eid}` | CLIENT WRITE | Client SDK | Owner + schema validation |
-| Create `/users/{uid}/conversations/{cid}` (status=active, no summary) | CLIENT WRITE | Client SDK | Owner + initial-state guard |
-| Create `/users/{uid}/conversations/{cid}/messages/{mid}` (role=user) | CLIENT WRITE | Client SDK | Owner + provenance check |
-| **`persistAssistantMessage`** (role=assistant) | **BACKEND-OWNED WRITE** | **Admin SDK only** | **NEVER user-token REST** |
-| **`completeAndSummarizeConversation`** (status, summary, summaryUpdatedAt) | **BACKEND-OWNED WRITE** | **Admin SDK only** | **NEVER user-token REST** |
-| **`persistPatternShiftInsight`** (`/insights/{iid}`) | **BACKEND-OWNED WRITE** | **Admin SDK only** | **NEVER user-token REST** |
-| `/users/{uid}/limits/{docId}` | BACKEND-OWNED | Admin SDK only | Rules: `allow read, write: if false` |
-
-The three backend-owned writes in bold (assistant message persistence, conversation completion/summarization, PatternShift insight persistence) are the privilege boundary. If the runtime identity lacks Firestore IAM for the target database, these operations throw `BackendPersistenceUnavailableError` and the API returns HTTP 503 with `error: "BACKEND_PERSISTENCE_UNAVAILABLE"`. The handler MUST NOT fall back to user-token REST, MUST NOT weaken the rules, and MUST NOT silently swallow the failure. See `server/services/privilegedPersistence.ts` for the typed error and the classification of Admin SDK permission failures.
-
-### Privacy-Safe Observability
-- Strict redaction in operational logs: Server logs never record journal contents, conversation text, prompts, model completions, raw tokens, or authorization headers.
-- Structured audit logs contain only: `requestId`, `timestamp`, `method`, `path`, `statusCode`, `latencyMs`, and a pseudonymized client identifier (`clientHash`: SHA-256 substring of UID).
-
----
-
-## 3. Environment Configuration
-
-Define required variables in `.env` (or Google Cloud Run environment settings):
+## 1. Clone
 
 ```bash
-# Gemini API Key (managed via Secret Manager in production)
-GEMINI_API_KEY="your-gemini-api-key"
-
-# Application URL
-APP_URL="https://your-cloud-run-service.run.app"
-
-# Token Revocation Checking
-# MUST be true in production. Set to false ONLY in AI Studio Preview sandbox.
-FIREBASE_CHECK_REVOKED=true
+git clone <your-repository-url>
+cd reflectra
 ```
 
-Never commit `.env` or sensitive credentials to version control.
+## 2. Install dependencies
 
----
-
-## 4. Google Cloud & Secret Manager Setup
-
-### Required IAM Permissions
-The Cloud Run runtime service account requires:
-- `roles/datastore.user` (Cloud Datastore / Firestore access)
-- `roles/secretmanager.secretAccessor` (Access to `GEMINI_API_KEY` secret)
-- `roles/firebaseauth.viewer` or `roles/identitytoolkit.viewer` (Identity Toolkit lookup for `FIREBASE_CHECK_REVOKED=true`)
-
-### Secret Manager Configuration
 ```bash
-# Create secret for Gemini API key
-gcloud secrets create gemini-api-key --data-file=- <<< "your-secret-key"
-
-# Grant Cloud Run service account access
-gcloud secrets add-iam-policy-binding gemini-api-key \
-  --member="serviceAccount:reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
+npm install
 ```
 
----
+## 3. Configure environment variables
 
-## 5. Local Development & Testing
+Create your local environment configuration with the required Firebase and backend values.
 
-### Development Server
+```bash
+cp .env.example .env
+```
+
+> Never commit credentials or production secrets.
+
+## 4. Start development
+
 ```bash
 npm run dev
 ```
-Starts Express backend and Vite development server bound to `http://0.0.0.0:3000`.
 
-### Type Checking & Linting
-```bash
-npm run lint
-```
-
-### Automated Vitest Suite
-```bash
-npm test
-```
-Runs:
-- `tests/rateLimiter.test.ts`: Distributed Firestore transaction-backed rate limiter unit tests.
-- `tests/authMiddleware.test.ts`: Missing, malformed, revoked, expired token tests across production and preview modes.
-- `tests/firestoreRules.test.ts`: Security rules AST invariant tests and emulator tests.
+For backend development, use the project's configured server command.
 
 ---
 
-## 6. Cloud Run Deployment
+# ✦ Security Notes
 
-### Named Firestore Database
+Reflectra's architecture intentionally separates several security concerns:
 
-This application targets a **named Firestore database** (not the default):
-
-- **Database ID**: `ai-studio-reflectra-07ab4b1d-1624-4acf-8074-a976e2a233c2`
-- **Project**: `industrious-edge-9xhgq`
-
-Both the client (`src/firebase.ts`) and the backend Admin SDK (`server/firebaseAdmin.ts`) are configured to target this database via `firebase-applet-config.json`. The Admin SDK uses `getFirestore(app, databaseId)` for privileged writes. This is **not** optional — all backend-owned writes must target the named database.
-
-### Production IAM Requirement
-
-**CRITICAL**: Backend-owned writes (assistant messages, conversation lifecycle transitions, PatternShift insights) execute via the Firebase Admin SDK. This requires the Cloud Run **runtime service account** to have Firestore IAM on the target project and database.
-
-The deployment MUST:
-1. Create or designate a service account in project `industrious-edge-9xhgq`.
-2. Grant `roles/datastore.user` (or `roles/firestore.user`) on the project.
-3. Attach that service account to the Cloud Run service via `--service-account`.
-
-If the Cloud Run service runs under a service account that lacks Firestore IAM, backend-owned writes will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503). The AI Studio preview sandbox cannot be granted IAM on the user's Firebase project; therefore, backend-owned persistence is **unavailable in preview by design**.
-
-### Deployment Command
-
-Build and deploy the containerized full-stack application:
-
-```bash
-# 1. Build the production bundle
-npm run build
-
-# 2. (One-time) Create dedicated service account if not exists
-gcloud iam service-accounts create reflectra-backend \
-  --display-name="Reflectra Backend Service Account" \
-  --project=industrious-edge-9xhgq
-
-# 3. Grant Firestore IAM to the service account
-gcloud projects add-iam-policy-binding industrious-edge-9xhgq \
-  --member="serviceAccount:reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com" \
-  --role="roles/datastore.user"
-
-# 4. (Optional) Grant Identity Toolkit access for token revocation checking
-gcloud projects add-iam-policy-binding industrious-edge-9xhgq \
-  --member="serviceAccount:reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com" \
-  --role="roles/identitytoolkit.viewer"
-
-# 5. Deploy to Cloud Run with explicit service account
-gcloud run deploy reflectra \
-  --source . \
-  --region asia-east1 \
-  --allow-unauthenticated \
-  --service-account="reflectra-backend@industrious-edge-9xhgq.iam.gserviceaccount.com" \
-  --set-env-vars="FIREBASE_CHECK_REVOKED=true,APP_URL=https://reflectra-ttdjc5plokhcurtykxiyb2-413982939225.asia-east1.run.app" \
-  --set-secrets="GEMINI_API_KEY=gemini-api-key:latest"
-```
-
-**Do not deploy without `--service-account`** unless the project's default Compute Engine service account already has the required Firestore IAM (not recommended for production).
+- Firebase Authentication verifies identity
+- Firestore rules enforce user ownership boundaries
+- Cloud Run handles privileged server-side orchestration
+- Secret Manager protects backend credentials
+- Gemini receives sanitized analytical context rather than unrestricted database access
+- Zero-knowledge exports are encrypted locally using the Web Crypto API
+- Sensitive backend configuration is never exposed to the client
 
 ---
 
-## 7. AI Studio Preview Limitations
+<div align="center">
 
-The AI Studio preview runtime is constrained:
+## Built for reflection that compounds over time.
 
-- The ambient Application Default Credentials (ADC) belong to the hosting/sandbox project, **not** to `industrious-edge-9xhgq`. No IAM grant on the target project is available from the preview sandbox.
-- User-authorized reads and deletes (owner-scoped) continue to work in preview because Firestore rules allow them.
-- **Backend-owned writes are unavailable in preview by design**:
-  - `POST /api/reflect` — assistant message persistence will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503) if privileged IAM is absent. The API does NOT return a generated assistant response that was never persisted; the user is informed that reflection services are temporarily unavailable.
-  - `POST /api/conversations/:id/summarize` — conversation completion/summarization will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503) if privileged IAM is absent. The conversation remains in `active` state; no summary is written.
-  - `POST /api/patternshift/analyze` — insight persistence will fail with `BACKEND_PERSISTENCE_UNAVAILABLE` (HTTP 503) if privileged IAM is absent. No insight is reported as generated unless it was successfully persisted.
-- `GET /api/patternshift/latest` and all read endpoints continue to work via the user-token REST path.
-- `DELETE /api/conversations/:id` continues to work via the user-token REST path (rules allow owner delete).
+**Not another journal.  
+A way to see the story between the entries.**
 
-Production Cloud Run deployments with a correctly-attached service account do NOT exhibit this limitation.
+<br/>
 
----
+`Reflect → Connect → Understand`
 
-## 8. PatternShift Feature Architecture
+<br/>
+
+✦ **Reflectra**
+
+</div>
