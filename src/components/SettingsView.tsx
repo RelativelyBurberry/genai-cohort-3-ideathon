@@ -7,6 +7,7 @@ import { WorkspaceCard } from './settings/WorkspaceCard';
 import { PrivacySection } from './settings/PrivacySection';
 import { SecuritySection } from './settings/SecuritySection';
 import { DemoWorkspaceCard } from './settings/DemoWorkspaceCard';
+import { NotificationSettingsCard } from './settings/NotificationSettingsCard';
 
 /**
  * SettingsView - Calm, editorial account & preferences area.
@@ -79,6 +80,20 @@ export const SettingsView: React.FC = () => {
             Your workspace
           </h2>
           <WorkspaceCard />
+        </section>
+
+        {/* Smart Reflection Reminders (Phase 13) */}
+        <section
+          className="settings-section"
+          aria-labelledby="settings-notifications-heading"
+        >
+          <h2
+            id="settings-notifications-heading"
+            className="settings-section-heading"
+          >
+            Smart reflection reminders
+          </h2>
+          <NotificationSettingsCard />
         </section>
 
         {/* Privacy & Data */}

@@ -158,6 +158,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // 7. Notification Preferences (Phase 13 — owner-scoped only)
+    // The authenticated owner may read, create, and update only their
+    // own notification preferences. This is a NARROW rule: it does not
+    // broaden access to any other preference document. Delete is
+    // intentionally not allowed from the client (cleanup can be added
+    // via the backend if ever needed).
+    match /users/{userId}/preferences/{preferenceId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
+    }
+
     // Default Deny for all other documents
     match /{document=**} {
       allow read, write: if false;

@@ -79,6 +79,25 @@ describe('Firestore Security Rules Static Analysis & Invariant Verification', ()
     );
   });
 
+  it('Phase 13: notification preferences are owner-scoped with narrow read/create/update', () => {
+    // The preferences rule must exist and be scoped to the owner.
+    expect(rulesContent).toContain(
+      'match /users/{userId}/preferences/{preferenceId}'
+    );
+    expect(rulesContent).toContain('allow read: if isOwner(userId);');
+    expect(rulesContent).toContain('allow create, update: if isOwner(userId);');
+    // Delete is deliberately forbidden from the client.
+    expect(rulesContent).toContain('allow delete: if false;');
+    // It must not broaden access to other preference documents (no
+    // blanket wildcard under /users/{userId}/preferences).
+    expect(rulesContent).not.toMatch(
+      /match\s*\/users\/\{userId\}\/preferences\/\{allPaths=\*\*\}/
+    );
+    expect(rulesContent).not.toMatch(
+      /match\s*\/users\/\{userId\}\/preferences\/\{documentId\}\s*\{\s*allow read, write:\s*if true;/
+    );
+  });
+
   it('restricts PatternShift insights: read-only for owner, write denied', () => {
     expect(rulesContent).toContain('match /users/{userId}/insights/{insightId}');
     expect(rulesContent).toMatch(

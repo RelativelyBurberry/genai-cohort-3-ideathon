@@ -8323,3 +8323,352 @@ textarea.input,
     grid-template-columns: 1fr;
   }
 }
+
+/* ================================================================
+   PHASE 13 — SMART NUDGE & NOTIFICATION INTELLIGENCE
+   Privacy-conscious, deterministic reminders.
+   ================================================================ */
+
+/* ----------------------------------------------------------------
+   In-App Nudge Fallback Banner
+   Non-intrusive, dismissible card — never a modal.
+   ---------------------------------------------------------------- */
+.nudge-banner {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 60;
+  max-width: 340px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1.125rem 1.25rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+  animation: nudge-banner-in var(--duration-slow) var(--ease-reflectra);
+}
+
+@keyframes nudge-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nudge-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.nudge-banner-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  color: var(--color-foreground);
+}
+
+.nudge-banner-body {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--color-muted-foreground);
+}
+
+.nudge-banner-why {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-subtle-foreground);
+}
+
+.nudge-banner-why-toggle {
+  margin: 0.5rem 0 0;
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.nudge-banner-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: 0;
+  padding: 0.25rem;
+  color: var(--color-subtle-foreground);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--duration-base) var(--ease-reflectra);
+}
+
+.nudge-banner-dismiss:hover {
+  color: var(--color-foreground);
+}
+
+.nudge-banner-dismiss-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ----------------------------------------------------------------
+   Notification Settings Card
+   ---------------------------------------------------------------- */
+.settings-notifications-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+.nudge-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+
+.nudge-status-row strong {
+  color: var(--color-foreground);
+  font-weight: 600;
+}
+
+.nudge-status-dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background-color: var(--color-success);
+  flex-shrink: 0;
+}
+
+.nudge-status-dot.is-blocked {
+  background-color: var(--color-danger);
+}
+
+.nudge-status-dot.is-default {
+  background-color: var(--color-subtle-foreground);
+}
+
+.nudge-enable-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.nudge-btn-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.nudge-config {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.nudge-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.nudge-field-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+}
+
+.nudge-time-input {
+  max-width: 180px;
+}
+
+.nudge-quiet-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.nudge-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.nudge-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nudge-switch-track {
+  width: 2.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background-color: var(--color-border-strong);
+  position: relative;
+  transition: background-color var(--duration-base) var(--ease-reflectra);
+}
+
+.nudge-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background-color: var(--color-surface);
+  transition: transform var(--duration-base) var(--ease-reflectra);
+}
+
+.nudge-switch input:checked + .nudge-switch-track {
+  background-color: var(--color-primary);
+}
+
+.nudge-switch input:checked + .nudge-switch-track::after {
+  transform: translateX(1rem);
+}
+
+.nudge-switch-label {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+
+.nudge-quiet-times {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.nudge-frequency-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-subtle-foreground);
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.nudge-save-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.nudge-success-msg,
+.nudge-error-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+}
+
+.nudge-success-msg {
+  background-color: rgba(90, 122, 94, 0.12);
+  color: var(--color-success);
+}
+
+.nudge-error-msg {
+  background-color: rgba(156, 74, 74, 0.1);
+  color: var(--color-danger);
+}
+
+.nudge-msg-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  margin-top: 0.0625rem;
+}
+
+.nudge-test-row {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  flex-wrap: wrap;
+}
+
+.nudge-test-note,
+.nudge-demo-note {
+  font-size: 0.75rem;
+  color: var(--color-subtle-foreground);
+  line-height: 1.5;
+  max-width: 340px;
+}
+
+.nudge-demo-row {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  flex-wrap: wrap;
+  padding: 0.625rem 0.875rem;
+  background-color: var(--color-accent-soft);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.nudge-privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--color-subtle-foreground);
+}
+
+.nudge-privacy-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: var(--color-primary);
+}
+
+/* Responsive */
+@media (max-width: 620px) {
+  .nudge-banner {
+    right: 1rem;
+    left: 1rem;
+    bottom: 1rem;
+    max-width: none;
+  }
+
+  .nudge-quiet-times {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nudge-banner {
+    animation: none;
+  }
+
+  .nudge-switch-track::after {
+    transition: none;
+  }
+}

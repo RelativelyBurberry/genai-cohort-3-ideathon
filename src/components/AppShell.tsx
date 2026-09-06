@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { ShieldCheck, LogOut, CheckCircle, Server, RefreshCw, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useIsDemoSession } from '../demo';
+import { useSmartNudge } from '../context/SmartNudgeProvider';
+import { InAppNudgeBanner } from './notifications/InAppNudgeBanner';
 import { AppSidebar, type AppView } from './AppSidebar';
 import { AppTopbar } from './AppTopbar';
 import { HomeDashboard } from './HomeDashboard';
@@ -27,6 +29,7 @@ import { DemoAdminConsole } from './admin/DemoAdminConsole';
 export const AppShell: React.FC = () => {
   const { user, getIdToken } = useAuth();
   const isDemo = useIsDemoSession();
+  const { inAppNudge, dismissInAppNudge } = useSmartNudge();
   const [activeView, setActiveView] = useState<AppView>('home');
   const [showSecurityDrawer, setShowSecurityDrawer] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -175,6 +178,14 @@ export const AppShell: React.FC = () => {
         <main className="workspace" role="main">
           {renderActiveView()}
         </main>
+
+        {/* In-App Smart Nudge Fallback Banner (Phase 13) */}
+        {inAppNudge && (
+          <InAppNudgeBanner
+            nudge={inAppNudge}
+            onDismiss={dismissInAppNudge}
+          />
+        )}
       </section>
     </div>
   );

@@ -1,9 +1,10 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RoleProvider } from './context/RoleContext';
-import { DemoProvider, useDemo, useIsDemoSession } from './demo';
+import { DemoProvider, useDemo, useIsDemoSession, DEMO_USER } from './demo';
 import { LandingPage } from './components/landing/LandingPage';
 import { AppShell } from './components/AppShell';
+import { SmartNudgeProvider } from './context/SmartNudgeProvider';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
@@ -21,10 +22,20 @@ function AppContent() {
 
   // Demo session takes precedence when active
   if (isDemoSession) {
-    return <AppShell />;
+    return (
+      <SmartNudgeProvider uid={DEMO_USER.uid}>
+        <AppShell />
+      </SmartNudgeProvider>
+    );
   }
 
-  return user ? <AppShell /> : <LandingPage />;
+  return user ? (
+    <SmartNudgeProvider uid={user.uid}>
+      <AppShell />
+    </SmartNudgeProvider>
+  ) : (
+    <LandingPage />
+  );
 }
 
 export default function App() {

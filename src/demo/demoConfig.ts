@@ -124,6 +124,78 @@ export function resetDemoRole(): void {
 export const DEMO_STORAGE_KEY = 'reflectra-demo-workspace';
 
 /**
+ * LocalStorage key for demo notification preferences.
+ * Namespaced separately from the workspace to emphasize that
+ * notification preferences are their own preference document.
+ */
+export const DEMO_NOTIFICATIONS_STORAGE_KEY = 'reflectra-demo-notifications';
+
+/**
+ * Default demo notification preferences. Smart reminders are OFF by
+ * default even in demos — enabling must always be explicit.
+ */
+export const DEFAULT_DEMO_NOTIFICATION_PREFS = {
+  enabled: false,
+  preferredTime: '20:00',
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '08:00',
+} as const;
+
+/**
+ * Load demo notification preferences from localStorage.
+ * Malformed data falls back to defaults (fail safe).
+ */
+export function loadDemoNotificationPrefs(): {
+  enabled: boolean;
+  preferredTime: string;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+} {
+  try {
+    const raw = localStorage.getItem(DEMO_NOTIFICATIONS_STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      return {
+        enabled: Boolean(p.enabled),
+        preferredTime:
+          typeof p.preferredTime === 'string' ? p.preferredTime : '20:00',
+        quietHoursEnabled: Boolean(p.quietHoursEnabled),
+        quietHoursStart:
+          typeof p.quietHoursStart === 'string' ? p.quietHoursStart : '22:00',
+        quietHoursEnd:
+          typeof p.quietHoursEnd === 'string' ? p.quietHoursEnd : '08:00',
+      };
+    }
+  } catch {
+    /* malformed → defaults */
+  }
+  return { ...DEFAULT_DEMO_NOTIFICATION_PREFS };
+}
+
+/**
+ * Persist demo notification preferences to localStorage.
+ * Demo-only — never touches Firestore or production storage.
+ */
+export function saveDemoNotificationPrefs(prefs: {
+  enabled: boolean;
+  preferredTime: string;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+}): void {
+  try {
+    localStorage.setItem(
+      DEMO_NOTIFICATIONS_STORAGE_KEY,
+      JSON.stringify(prefs)
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * Reset demo workspace to initial fixture state.
  */
 export function resetDemoWorkspace(): void {
