@@ -3,17 +3,13 @@ import { Router, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { checkAndIncrementRateLimit } from '../services/rateLimiter.js';
 import { computePatternShiftMetrics } from '../services/patternShiftEngine.js';
-import type { RawEntry, RawConversation } from '../services/patternShiftEngine.js';
 import { generatePatternShiftInsights } from '../services/geminiService.js';
 import {
-  fetchUserEntriesForPatternShift,
-  fetchUserConversationsForPatternShift,
   persistPatternShiftInsight,
   fetchLatestPatternShiftInsight,
   BackendPersistenceUnavailableError,
   BackendReadUnavailableError,
 } from '../services/patternShiftPersistence.js';
-import { toBackendPersistenceApiResponse } from '../services/privilegedPersistence.js';
 import {
   validatePatternShiftAnalysisPayload,
   PATTERN_ANALYSIS_PAYLOAD_LIMITS,
@@ -24,26 +20,31 @@ export const patternShiftRouter = Router();
 /**
  * POST /api/patternshift/analyze
  *
- * Runs deterministic pattern extraction and conditional Gemini interpretation
- * across the authenticated user's historical journal entries and completed
- * reflections.
+ * CLIENT-READ PRIMARY ARCHITECTURE.
  *
- * Authority matrix (remediation):
- * - BACKEND-OWNED READS (entries, conversations): privileged Admin SDK only.
- *   The Firebase ID token is NEVER forwarded to the Google Cloud Firestore
- *   REST API (Firebase Auth ID tokens are not Google OAuth2 access tokens and
- *   return 401 UNAUTHENTICATED / ACCESS_TOKEN_TYPE_UNSUPPORTED).
- *   If the runtime lacks Firestore read IAM (AI Studio preview sandbox), the
- *   reads fail with BackendReadUnavailableError. In that verified capability
- *   case ONLY, a validated, minimally scoped client-supplied payload
- *   (`analysisPayload`, built from the authenticated client's own Firestore
- *   reads) may be used. The request `uid` is never trusted — identity always
- *   comes exclusively from requireAuth.
- * - BACKEND-OWNED WRITE (insight persistence): privileged Admin SDK only.
- *   NEVER uses the user token. If the runtime lacks Firestore IAM, the
- *   successfully generated insight is still returned to the authenticated
- *   caller with explicit `persistence` metadata (persisted: false) — the user
- *   never loses a successful analysis merely because the sandbox cannot write.
+ * The authenticated frontend reads the user's journal entries and completed
+ * reflections through the Firebase Client SDK, builds a minimal, validated
+ * `analysisPayload`, and sends it in the FIRST AND ONLY request.
+ *
+ * This endpoint:
+ * - verifies the Firebase ID token via requireAuth;
+ * - derives identity EXCLUSIVELY from the verified token (body uid fields
+ *   are never read);
+ * - validates `analysisPayload` strictly (unknown keys rejected, bounds
+ *   enforced);
+ * - performs ZERO Firestore reads for the analysis request;
+ * - computes deterministic PatternShift intelligence and invokes Gemini
+ *   with bounded metrics only;
+ * - persists the generated insight via the privileged Admin SDK WHEN the
+ *   runtime has IAM authority; otherwise returns the successful insight
+ *   ephemerally with `persistence: { persisted: false }`. A successful
+ *   analysis NEVER depends on backend Firestore write/read IAM.
+ * - returns exactly ONE canonical response contract.
+ *
+ * SECURITY: The Firebase ID token is NEVER forwarded to the Google Cloud
+ * Firestore REST API (Firebase Auth ID tokens are not Google OAuth2 access
+ * tokens and would return 401 UNAUTHENTICATED). All backend reads/writes
+ * use the privileged Admin SDK only.
  */
 patternShiftRouter.post(
   '/api/patternshift/analyze',
@@ -56,10 +57,17 @@ patternShiftRouter.post(
       return;
     }
 
-    // Optional, narrowly scoped client payload. Identity is ONLY derived
-    // from the verified token; a `uid` field is not part of the schema and
-    // is never read.
+    // Strict payload validation. `analysisPayload` is REQUIRED: the
+    // client-read primary flow always supplies it.
     const body = req.body && typeof req.body === 'object' ? req.body : {};
+    if (body.analysisPayload === undefined || body.analysisPayload === null) {
+      res.status(400).json({
+        error: 'invalid_analysis_payload',
+        message: 'analysisPayload is required. The frontend must supply its authenticated records for analysis.',
+      });
+      return;
+    }
+
     const payloadValidation = validatePatternShiftAnalysisPayload(body.analysisPayload);
     if (!payloadValidation.valid) {
       res.status(400).json({
@@ -68,10 +76,6 @@ patternShiftRouter.post(
       });
       return;
     }
-    // True when the client explicitly supplied an analysis payload (even an
-    // empty one — e.g. a user with genuinely no records).
-    const clientProvidedPayload =
-      body.analysisPayload !== undefined && body.analysisPayload !== null;
 
     try {
       // 1. Rate Limiting Check (10 req/60s per user)
@@ -89,47 +93,10 @@ patternShiftRouter.post(
         return;
       }
 
-      // 2. Fetch User's Historical Data (BACKEND-OWNED READS — Admin SDK)
-      //
-      //    If the runtime lacks Firestore READ IAM (verified infra
-      //    capability failure only), fall back to the validated client
-      //    payload. Any OTHER read failure propagates as a normal error.
-      let entries: RawEntry[] = [];
-      let conversations: RawConversation[] = [];
-      let backendReadUnavailable: BackendReadUnavailableError | null = null;
-
-      try {
-        [entries, conversations] = await Promise.all([
-          fetchUserEntriesForPatternShift(uid),
-          fetchUserConversationsForPatternShift(uid),
-        ]);
-      } catch (readErr: any) {
-        if (readErr instanceof BackendReadUnavailableError) {
-          backendReadUnavailable = readErr;
-        } else {
-          throw readErr;
-        }
-      }
-
-      if (backendReadUnavailable) {
-        if (clientProvidedPayload) {
-          entries = payloadValidation.entries;
-          conversations = payloadValidation.completedConversations;
-          console.warn(
-            `[PATTERNSHIFT_ANALYZE] backend Firestore reads unavailable (${backendReadUnavailable.operation}); using validated client payload for user ${uid}.`
-          );
-        } else {
-          // No server-side read capability AND no client records: the
-          // client must supply its minimal records from its own
-          // authenticated reads and retry.
-          res.status(200).json({
-            status: 'client_data_required',
-            message:
-              'The backend cannot access Firestore in this environment. Re-run analysis from the app so your local records can be included.',
-          });
-          return;
-        }
-      }
+      // 2. Analysis inputs come EXCLUSIVELY from the validated client
+      //    payload. This route performs ZERO Firestore reads.
+      const entries = payloadValidation.entries;
+      const conversations = payloadValidation.completedConversations;
 
       // 3. Deterministic Preprocessing Engine
       const engineResult = computePatternShiftMetrics(entries, conversations);
@@ -146,7 +113,8 @@ patternShiftRouter.post(
         return;
       }
 
-      // 5. Gemini Interpretation Layer (Receives ONLY bounded metrics)
+      // 5. Gemini Interpretation Layer (Receives ONLY bounded metrics —
+      //    never raw content, never location coordinates)
       const aiInsights = await generatePatternShiftInsights(engineResult.metrics);
 
       // 6. Construct Insight Document
@@ -167,11 +135,10 @@ patternShiftRouter.post(
         type: 'patternshift' as const,
       };
 
-      // 7. Persist Insight Document (BACKEND-OWNED WRITE — Admin SDK only)
-      //
-      //    Infrastructure capability failure ONLY: the generated insight is
-      //    returned to the authenticated caller with explicit persistence
-      //    metadata. Unexpected persistence errors still fail normally.
+      // 7. Persist Insight Document (privileged Admin SDK write ONLY —
+      //    never a user token). A verified infrastructure capability
+      //    failure MUST NOT break a successful analysis: the insight is
+      //    returned ephemerally with explicit persistence metadata.
       try {
         await persistPatternShiftInsight(uid, newInsight);
         res.status(200).json({
@@ -196,18 +163,6 @@ patternShiftRouter.post(
         throw persistErr;
       }
     } catch (err: any) {
-      // Defensive: BackendPersistenceUnavailableError reaching this handler
-      // from an unexpected path still maps to the stable capability response.
-      if (err instanceof BackendPersistenceUnavailableError) {
-        const apiResp = toBackendPersistenceApiResponse(err, 'persistPatternShiftInsight');
-        console.error('[PATTERNSHIFT_ANALYZE_ERROR] capability unavailable:', err.operation);
-        res.status(apiResp.status).json({
-          error: apiResp.body.error,
-          message: apiResp.body.message,
-        });
-        return;
-      }
-
       // Configuration error: the AI interpretation layer cannot start
       // because its secret is unavailable in this runtime. Surface an
       // honest, actionable 503 (mirroring the reflection route) instead
@@ -236,8 +191,16 @@ patternShiftRouter.post(
 /**
  * GET /api/patternshift/latest
  *
- * Retrieves the latest persisted PatternShift insight for the authenticated user.
- * BACKEND-OWNED READ (Admin SDK only — never user-token Firestore REST).
+ * Fallback read of the most recently persisted PatternShift insight.
+ *
+ * The frontend normally reads its own insights directly via the Firebase
+ * Client SDK (firestore.rules allow owner reads). This endpoint remains as
+ * a backend fallback. It performs a privileged Admin SDK read ONLY — the
+ * Firebase ID token is never forwarded to Firestore REST.
+ *
+ * If the runtime lacks backend Firestore read IAM (AI Studio preview
+ * sandbox), it gracefully returns `insight: null` so the frontend shows
+ * the empty state without a false error.
  */
 patternShiftRouter.get(
   '/api/patternshift/latest',

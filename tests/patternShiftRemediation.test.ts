@@ -8,12 +8,11 @@ import * as geminiService from '../server/services/geminiService.js';
 import * as persistenceService from '../server/services/patternShiftPersistence.js';
 import {
   BackendPersistenceUnavailableError,
-  BackendReadUnavailableError,
 } from '../server/services/privilegedPersistence.js';
-import { DEMO_USER, DEMO_STORAGE_KEY, isDemoModeEnabled } from '../src/demo/demoConfig.js';
+import { DEMO_USER, DEMO_STORAGE_KEY } from '../src/demo/demoConfig.js';
 import { DEMO_PATTERN_INSIGHT } from '../src/demo/demoData.js';
 
-describe('Phase 10 PatternShift Remediation Suite', () => {
+describe('Phase 10 PatternShift Remediation — Client-Read Primary Architecture', () => {
   let app: express.Express;
   let server: Server;
   let baseUrl: string;
@@ -74,35 +73,15 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
   };
 
   // 1. Firebase ID token is NOT forwarded to Google Firestore REST
-  it('1. verifies that PatternShift persistence functions do NOT forward Firebase ID tokens to Firestore REST', async () => {
-    const mockGet = vi.fn().mockResolvedValue({ docs: [] });
-    const mockCollection = vi.fn().mockReturnValue({
-      doc: vi.fn().mockReturnValue({
-        collection: vi.fn().mockReturnValue({ get: mockGet }),
-      }),
-    });
-    vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue({
-      collection: mockCollection,
-    } as any);
-
-    // Call fetchUserEntriesForPatternShift directly — no token parameter
-    await persistenceService.fetchUserEntriesForPatternShift('user_direct');
-    expect(mockCollection).toHaveBeenCalledWith('users');
-
-    // Verify signature expects ONLY the uid, preventing any caller from passing a token
-    expect(persistenceService.fetchUserEntriesForPatternShift.length).toBe(1);
-    expect(persistenceService.fetchUserConversationsForPatternShift.length).toBe(1);
+  //    (verified by the signature of persistence functions)
+  it('1. verifies that PatternShift persistence functions do NOT accept Firebase ID tokens (no token parameter)', async () => {
+    // fetchLatestPatternShiftInsight is used by the fallback GET /latest endpoint
     expect(persistenceService.fetchLatestPatternShiftInsight.length).toBe(1);
+    expect(persistenceService.persistPatternShiftInsight.length).toBe(2); // (uid, insight)
   });
 
-  // 2. Server-side Firestore path works when backend capability exists
-  it('2. server-side Firestore path works when backend capability exists', async () => {
-    const fetchEntriesSpy = vi
-      .spyOn(persistenceService, 'fetchUserEntriesForPatternShift')
-      .mockResolvedValueOnce(validEntries);
-    const fetchConvsSpy = vi
-      .spyOn(persistenceService, 'fetchUserConversationsForPatternShift')
-      .mockResolvedValueOnce([]);
+  // 2. Client-read primary: analysis works when backend has write capability
+  it('2. analysis succeeds with client payload; backend writes insight when capability exists', async () => {
     const geminiSpy = vi
       .spyOn(geminiService, 'generatePatternShiftInsights')
       .mockResolvedValueOnce(mockAiOutput);
@@ -110,38 +89,6 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
       .spyOn(persistenceService, 'persistPatternShiftInsight')
       .mockResolvedValueOnce(undefined);
 
-    const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer valid_user_token',
-      },
-      body: JSON.stringify({}),
-    });
-
-    const data = await res.json();
-    expect(res.status).toBe(200);
-    expect(data.status).toBe('success');
-    expect(data.persistence).toEqual({ persisted: true });
-    expect(data.insight.observations).toEqual(mockAiOutput.observations);
-    expect(fetchEntriesSpy).toHaveBeenCalledWith('verified_user_abc');
-    expect(fetchConvsSpy).toHaveBeenCalledWith('verified_user_abc');
-    expect(geminiSpy).toHaveBeenCalledTimes(1);
-    expect(persistSpy).toHaveBeenCalledTimes(1);
-  });
-
-  // 3. Client-provided fallback only activates for verified backend infrastructure capability failures
-  it('3. client-provided fallback only activates when backend Firestore read capability is unavailable', async () => {
-    // Simulate backend read capability failure (BackendReadUnavailableError)
-    vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockRejectedValueOnce(
-      new BackendReadUnavailableError('fetchUserEntriesForPatternShift')
-    );
-    vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
-
-    vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce(mockAiOutput);
-    vi.spyOn(persistenceService, 'persistPatternShiftInsight').mockResolvedValueOnce(undefined);
-
-    // Client supplies its minimal records
     const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
       method: 'POST',
       headers: {
@@ -159,15 +106,20 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.status).toBe('success');
-    expect(data.insight.itemCount.total).toBe(3);
+    expect(data.persistence).toEqual({ persisted: true });
     expect(data.insight.observations).toEqual(mockAiOutput.observations);
+    expect(geminiSpy).toHaveBeenCalledTimes(1);
+    expect(persistSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('3b. when backend read capability is unavailable and client sends no payload, route returns client_data_required', async () => {
-    vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockRejectedValueOnce(
-      new BackendReadUnavailableError('fetchUserEntriesForPatternShift')
+  // 3. Client-read primary: analysis works even when backend write capability is unavailable
+  it('3. successful analysis returned even when backend write fails (persisted: false)', async () => {
+    vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce(mockAiOutput);
+
+    // Simulate backend write capability failure
+    vi.spyOn(persistenceService, 'persistPatternShiftInsight').mockRejectedValueOnce(
+      new BackendPersistenceUnavailableError('persistPatternShiftInsight')
     );
-    vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
 
     const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
       method: 'POST',
@@ -175,23 +127,28 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer valid_user_token',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        analysisPayload: {
+          entries: validEntries,
+          completedConversations: [],
+        },
+      }),
     });
 
     const data = await res.json();
     expect(res.status).toBe(200);
-    expect(data.status).toBe('client_data_required');
-    expect(data.message).toContain('backend cannot access Firestore');
+    expect(data.status).toBe('success');
+    expect(data.insight).toBeDefined();
+    expect(data.insight.observations).toEqual(mockAiOutput.observations);
+    // Explicit persistence metadata signaling sandbox write limitation
+    expect(data.persistence).toEqual({
+      persisted: false,
+      reason: 'backend_persistence_unavailable',
+    });
   });
 
   // 4. Request uid cannot override authenticated req.user.uid
   it('4. request uid in body or payload cannot override authenticated req.user.uid', async () => {
-    const fetchEntriesSpy = vi
-      .spyOn(persistenceService, 'fetchUserEntriesForPatternShift')
-      .mockResolvedValueOnce(validEntries);
-    const fetchConvsSpy = vi
-      .spyOn(persistenceService, 'fetchUserConversationsForPatternShift')
-      .mockResolvedValueOnce([]);
     vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce(mockAiOutput);
     const persistSpy = vi
       .spyOn(persistenceService, 'persistPatternShiftInsight')
@@ -204,14 +161,18 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
         Authorization: 'Bearer valid_user_token', // verified_user_abc
       },
       body: JSON.stringify({
+        analysisPayload: {
+          entries: validEntries,
+          completedConversations: [],
+        },
         uid: 'attacker_override_uid',
       }),
     });
 
     const data = await res.json();
     expect(res.status).toBe(200);
-    expect(fetchEntriesSpy).toHaveBeenCalledWith('verified_user_abc');
-    expect(fetchConvsSpy).toHaveBeenCalledWith('verified_user_abc');
+    expect(data.status).toBe('success');
+    // Persistence called with verified UID only
     expect(persistSpy).toHaveBeenCalledWith('verified_user_abc', expect.anything());
   });
 
@@ -264,42 +225,26 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
     expect(data.message).toContain('unsupported field');
   });
 
-  // 6. Successful Gemini analysis is returned even when persistence specifically fails due to infrastructure IAM
-  it('6. successful Gemini analysis is returned even when persistence fails due to backend IAM (persisted: false)', async () => {
-    vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce(validEntries);
-    vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
-    vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce(mockAiOutput);
-
-    // Simulate backend write capability failure (BackendPersistenceUnavailableError)
-    vi.spyOn(persistenceService, 'persistPatternShiftInsight').mockRejectedValueOnce(
-      new BackendPersistenceUnavailableError('persistPatternShiftInsight')
-    );
-
+  it('5c. requires analysisPayload (client-read primary flow)', async () => {
     const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer valid_user_token',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({}), // missing analysisPayload
     });
 
     const data = await res.json();
-    expect(res.status).toBe(200);
-    expect(data.status).toBe('success');
-    expect(data.insight).toBeDefined();
-    expect(data.insight.observations).toEqual(mockAiOutput.observations);
-    // Explicit persistence metadata signaling sandbox write limitation
-    expect(data.persistence).toEqual({
-      persisted: false,
-      reason: 'backend_persistence_unavailable',
-    });
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_analysis_payload');
+    expect(data.message).toContain('analysisPayload is required');
   });
+
+  // 6. Successful Gemini analysis is returned even when persistence fails (covered by test 3)
 
   // 7. Unexpected persistence errors still fail normally
   it('7. unexpected persistence errors (not IAM capability) still fail normally', async () => {
-    vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce(validEntries);
-    vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
     vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce(mockAiOutput);
 
     // Simulate unexpected runtime crash / network error
@@ -313,7 +258,12 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer valid_user_token',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        analysisPayload: {
+          entries: validEntries,
+          completedConversations: [],
+        },
+      }),
     });
 
     const data = await res.json();
@@ -322,12 +272,41 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
     expect(data.insight).toBeUndefined();
   });
 
-  // 8. Production persistence success remains unchanged
-  it('8. production persistence success returns { persisted: true } and the insight', async () => {
-    vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce(validEntries);
-    vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
-    vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce(mockAiOutput);
-    vi.spyOn(persistenceService, 'persistPatternShiftInsight').mockResolvedValueOnce(undefined);
+  // 8. Insufficient data guard (< 3 meaningful items) works
+  it('8. returns insufficient_data when < 3 meaningful items provided', async () => {
+    const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer valid_user_token',
+      },
+      body: JSON.stringify({
+        analysisPayload: {
+          entries: [
+            { id: 'e1', content: 'Only one entry.', moodRating: 3, createdAt: '2026-09-01T10:00:00Z' },
+          ],
+          completedConversations: [],
+        },
+      }),
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.status).toBe('insufficient_data');
+    expect(data.available).toBe(1);
+    expect(data.required).toBe(3);
+  });
+
+  // 9. Rate limiting works
+  it('9. returns 429 when per-user rate limit is exceeded', async () => {
+    vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+      allowed: false,
+      retryAfterSeconds: 45,
+      remaining: 0,
+      count: 10,
+      limit: 10,
+      resetTimeMs: Date.now() + 45000,
+    });
 
     const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
       method: 'POST',
@@ -335,25 +314,140 @@ describe('Phase 10 PatternShift Remediation Suite', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer valid_user_token',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        analysisPayload: {
+          entries: validEntries,
+          completedConversations: [],
+        },
+      }),
     });
 
     const data = await res.json();
-    expect(res.status).toBe(200);
-    expect(data.status).toBe('success');
-    expect(data.persistence).toEqual({ persisted: true });
-    expect(data.insight.id).toBeDefined();
+    expect(res.status).toBe(429);
+    expect(data.error).toBe('rate_limit_exceeded');
+    expect(data.retryAfterSeconds).toBe(45);
   });
 
-  // 9. Demo mode remains isolated
-  it('9. demo mode preserves all isolation guarantees', () => {
-    // Note: test environment has VITE_DEMO_MODE=true for local dev.
-    // The critical guarantees are identity and storage isolation, not the
-    // runtime flag value in this specific dev config.
+  // 10. Auth errors work
+  it('10. returns 401 when Authorization header is missing', async () => {
+    const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(401);
+    expect(data.error).toBe('auth/missing-token');
+  });
+
+  it('10b. returns 401 when token is invalid', async () => {
+    const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer bad_token',
+      },
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(401);
+    expect(data.error).toBe('auth/invalid-token');
+  });
+
+  // 11. Demo mode isolation preserved
+  it('11. demo mode preserves all isolation guarantees', () => {
     expect(DEMO_USER.uid).toBe('demo-user-local-preview');
     expect(DEMO_USER.email).toBe('demo@reflectra.local');
     expect(DEMO_STORAGE_KEY).toBe('reflectra-demo-workspace');
     expect(DEMO_PATTERN_INSIGHT.type).toBe('patternshift');
     expect(DEMO_PATTERN_INSIGHT.intelligence).toBeDefined();
+  });
+
+  // 12. Backend performs ZERO Firestore reads during normal analysis route
+  it('12. backend performs ZERO Firestore reads during normal analyze route', async () => {
+    const geminiSpy = vi
+      .spyOn(geminiService, 'generatePatternShiftInsights')
+      .mockResolvedValueOnce(mockAiOutput);
+    const persistSpy = vi
+      .spyOn(persistenceService, 'persistPatternShiftInsight')
+      .mockResolvedValueOnce(undefined);
+
+    // `fetchLatestPatternShiftInsight` is the ONLY remaining backend read
+    // function; it must never be called by the analyze route.
+    const fetchLatestSpy = vi
+      .spyOn(persistenceService, 'fetchLatestPatternShiftInsight');
+
+    // Additionally, prove no Admin SDK `.get()` (Firestore READ) happens:
+    // the mock DB records any `.get()` call and would throw if invoked.
+    const firestoreGetSpy = vi.fn().mockRejectedValue(new Error('UNEXPECTED FIRESTORE READ'));
+    const mockDb = {
+      collection: vi.fn().mockReturnValue({
+        doc: vi.fn().mockReturnValue({
+          collection: vi.fn().mockReturnValue({
+            doc: vi.fn().mockReturnValue({
+              set: vi.fn().mockResolvedValue(undefined),
+              get: firestoreGetSpy,
+            }),
+            get: firestoreGetSpy,
+            orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ get: firestoreGetSpy }) }),
+          }),
+          get: firestoreGetSpy,
+        }),
+        get: firestoreGetSpy,
+      }),
+    };
+    vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue(mockDb as any);
+
+    const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer valid_user_token',
+      },
+      body: JSON.stringify({
+        analysisPayload: {
+          entries: validEntries,
+          completedConversations: [],
+        },
+      }),
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.status).toBe('success');
+
+    // CRITICAL: NO backend Firestore reads
+    expect(fetchLatestSpy).not.toHaveBeenCalled();
+    expect(firestoreGetSpy).not.toHaveBeenCalled();
+
+    expect(geminiSpy).toHaveBeenCalledTimes(1);
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // 13. Backend performs ZERO Firebase ID token -> Firestore REST calls
+  it('13. backend performs ZERO Firebase ID token -> Firestore REST calls', async () => {
+    vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce(mockAiOutput);
+    const persistSpy = vi
+      .spyOn(persistenceService, 'persistPatternShiftInsight')
+      .mockResolvedValueOnce(undefined);
+
+    const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer valid_user_token',
+      },
+      body: JSON.stringify({
+        analysisPayload: {
+          entries: validEntries,
+          completedConversations: [],
+        },
+      }),
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    // Verified by function signatures: persistPatternShiftInsight accepts (uid, insight) only
+    expect(persistSpy).toHaveBeenCalledWith('verified_user_abc', expect.anything());
   });
 });

@@ -70,13 +70,16 @@ export interface PatternShiftInsight {
 
 /**
  * Explicit persistence status returned alongside a successfully
- * generated insight.
+ * generated insight — part of the CANONICAL success response contract.
  *
- * - `persisted: true`  → normal production behavior, insight saved.
- * - `persisted: false` → the insight was generated successfully but the
- *   backend could not write it because the runtime lacks backend
- *   Firestore IAM (AI Studio preview sandbox). The analysis is still
- *   delivered to the authenticated caller.
+ * - `persisted: true`  → normal production behavior, insight saved by the
+ *   backend privileged Admin SDK path.
+ * - `persisted: false` → the insight was generated successfully but could
+ *   not be persisted in this runtime (e.g. the backend lacks Firestore
+ *   IAM in the AI Studio preview sandbox, or no client-rules-compatible
+ *   write path exists). The analysis is ALWAYS still delivered to the
+ *   authenticated caller — successful analysis never depends on
+ *   persistence capability.
  */
 export interface PatternShiftPersistenceStatus {
   persisted: boolean;
@@ -84,11 +87,18 @@ export interface PatternShiftPersistenceStatus {
   reason?: string;
 }
 
+/**
+ * CANONICAL PatternShift API response contract.
+ *
+ * Exactly ONE of these shapes is ever returned by
+ * POST /api/patternshift/analyze. The frontend parser in
+ * patternShiftService.ts validates against exactly this union.
+ */
 export type PatternShiftResponse =
   | {
       status: 'success';
       insight: PatternShiftInsight;
-      persistence?: PatternShiftPersistenceStatus;
+      persistence: PatternShiftPersistenceStatus;
     }
   | {
       status: 'insufficient_data';
@@ -97,11 +107,8 @@ export type PatternShiftResponse =
       message: string;
     }
   | {
-      status: 'client_data_required';
-      message: string;
-    }
-  | {
       status: 'error';
       error: string;
       message: string;
+      retryAfterSeconds?: number;
     };

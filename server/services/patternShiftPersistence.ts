@@ -5,102 +5,39 @@ import {
   BackendPersistenceUnavailableError,
   BackendReadUnavailableError,
 } from './privilegedPersistence.js';
-import type { RawEntry, RawConversation } from './patternShiftEngine.js';
 
 /**
- * Server-side unified persistence and retrieval service for PatternShift.
+ * Server-side persistence service for PatternShift.
  *
  * CRITICAL SECURITY INVARIANTS:
- * 1. All data lookups strictly scoped to `/users/{verifiedUid}/...`.
- * 2. Generated insights stored under `/users/{verifiedUid}/insights/{insightId}`.
+ * 1. The analysis route (POST /api/patternshift/analyze) performs ZERO
+ *    Firestore reads — analysis inputs come exclusively from the
+ *    validated client-supplied `analysisPayload`.
+ * 2. Generated insights are stored under `/users/{verifiedUid}/insights/{insightId}`
+ *    using privileged Admin SDK authority ONLY. The Firebase ID token is
+ *    NEVER forwarded to the Google Cloud Firestore REST API — Firebase
+ *    Auth ID tokens are not Google OAuth2 access tokens and Firestore
+ *    REST rejects them (401 UNAUTHENTICATED / ACCESS_TOKEN_TYPE_UNSUPPORTED).
  * 3. Never queries across multiple users.
- * 4. Backend-owned writes (insight persistence) use privileged Admin SDK
- *    authority only. NEVER user-token REST.
- * 5. Backend-owned reads (entries, conversations, latest insight) use the
- *    Admin SDK privileged authority. The Firebase ID token is NEVER
- *    forwarded to the Google Cloud Firestore REST API — Firebase Auth ID
- *    tokens are not Google OAuth2 access tokens and Firestore REST
- *    rejects them (401 UNAUTHENTICATED / ACCESS_TOKEN_TYPE_UNSUPPORTED).
- *    Where the runtime lacks Firestore read IAM, reads throw
- *    `BackendReadUnavailableError` and the PatternShift route may use a
- *    validated, narrowly scoped client-supplied payload instead.
+ * 4. Where the runtime lacks Firestore IAM, writes throw
+ *    `BackendPersistenceUnavailableError` and the route returns the
+ *    successfully generated insight ephemerally with explicit persistence
+ *    metadata — a successful analysis never depends on backend IAM.
  */
-
-/**
- * Fetch user's journal entries for PatternShift analysis.
- *
- * BACKEND-OWNED READ. Privileged Admin SDK authority only. The user's
- * Firebase ID token is deliberately NOT accepted: it must never be used
- * as a Google OAuth2 access token against Firestore REST.
- *
- * If the runtime lacks Firestore read IAM (AI Studio preview sandbox),
- * throws `BackendReadUnavailableError`.
- */
-export async function fetchUserEntriesForPatternShift(uid: string): Promise<RawEntry[]> {
-  return withBackendReadCapability('fetchUserEntriesForPatternShift', async () => {
-    const db = getAdminDb();
-    const entriesSnap = await db.collection('users').doc(uid).collection('entries').get();
-
-    return entriesSnap.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        title: data.title || '',
-        content: data.content || '',
-        moodRating: typeof data.moodRating === 'number' ? data.moodRating : undefined,
-        tags: Array.isArray(data.tags) ? data.tags : [],
-        createdAt: data.createdAt || null,
-        updatedAt: data.updatedAt || null,
-        location: data.location || null,
-      };
-    });
-  });
-}
-
-/**
- * Fetch user's conversations for PatternShift analysis.
- *
- * BACKEND-OWNED READ. Privileged Admin SDK authority only. See
- * `fetchUserEntriesForPatternShift` for the ID-token rationale.
- *
- * If the runtime lacks Firestore read IAM (AI Studio preview sandbox),
- * throws `BackendReadUnavailableError`.
- */
-export async function fetchUserConversationsForPatternShift(uid: string): Promise<RawConversation[]> {
-  return withBackendReadCapability('fetchUserConversationsForPatternShift', async () => {
-    const db = getAdminDb();
-    const convsSnap = await db.collection('users').doc(uid).collection('conversations').get();
-
-    return convsSnap.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        title: data.title || '',
-        summary: data.summary || null,
-        status: data.status || 'active',
-        createdAt: data.createdAt || null,
-        updatedAt: data.updatedAt || null,
-        summaryUpdatedAt: data.summaryUpdatedAt || null,
-      };
-    });
-  });
-}
 
 /**
  * Persist a generated PatternShift insight.
  *
  * BACKEND-OWNED WRITE. Privileged Admin SDK authority only.
- * The token parameter is ignored for security - NEVER falls back to
- * user-token REST. If the runtime lacks Firestore IAM, throws
- * BackendPersistenceUnavailableError.
+ *
+ * SECURITY: This function deliberately accepts ONLY (uid, insight) — there
+ * is NO token parameter, making it impossible for a caller to accidentally
+ * forward a Firebase ID token to Firestore.
+ *
+ * If the runtime lacks Firestore write IAM, throws
+ * `BackendPersistenceUnavailableError`.
  */
-export async function persistPatternShiftInsight(
-  uid: string,
-  insight: any,
-  token?: string
-): Promise<void> {
-  // SECURITY: Ignore token parameter. Backend-owned writes MUST use
-  // privileged Admin SDK authority only.
+export async function persistPatternShiftInsight(uid: string, insight: any): Promise<void> {
   await withBackendPersistenceCapability('persistPatternShiftInsight', async () => {
     const db = getAdminDb();
     const insightRef = db.collection('users').doc(uid).collection('insights').doc(insight.id);
@@ -122,9 +59,12 @@ export async function persistPatternShiftInsight(
 /**
  * Fetch the latest PatternShift insight for a user.
  *
- * BACKEND-OWNED READ. Privileged Admin SDK authority only. The user's
- * Firebase ID token is deliberately NOT accepted (see
- * `fetchUserEntriesForPatternShift`).
+ * BACKEND-OWNED READ. Privileged Admin SDK authority only (used by the
+ * GET /api/patternshift/latest FALLBACK endpoint; the frontend normally
+ * reads its own insights via the Firebase Client SDK).
+ *
+ * The user's Firebase ID token is deliberately NOT accepted (see the
+ * module-level invariants).
  *
  * If the runtime lacks Firestore read IAM (AI Studio preview sandbox),
  * throws `BackendReadUnavailableError`.

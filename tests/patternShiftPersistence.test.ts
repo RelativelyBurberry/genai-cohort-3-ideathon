@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as adminHelper from '../server/firebaseAdmin.js';
 import {
-  fetchUserEntriesForPatternShift,
-  fetchUserConversationsForPatternShift,
   fetchLatestPatternShiftInsight,
 } from '../server/services/patternShiftPersistence.js';
 import {
@@ -12,7 +10,7 @@ import {
   withBackendReadCapability,
 } from '../server/services/privilegedPersistence.js';
 
-describe('PatternShift backend-owned read remediation', () => {
+describe('PatternShift backend-owned read/persistence remediation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -21,19 +19,20 @@ describe('PatternShift backend-owned read remediation', () => {
     vi.restoreAllMocks();
   });
 
-  it('fetchUserEntriesForPatternShift uses the Admin SDK when capability exists', async () => {
+  it('fetchLatestPatternShiftInsight uses the Admin SDK when capability exists', async () => {
     const mockGet = vi.fn().mockResolvedValue({
+      empty: false,
       docs: [
         {
-          id: 'entry_1',
+          id: 'insight_1',
           data: () => ({
-            title: 'Today',
-            content: 'A calm morning.',
-            moodRating: 4,
-            tags: ['gratitude'],
-            createdAt: '2026-09-01T10:00:00Z',
-            updatedAt: '2026-09-01T10:00:00Z',
-            location: { label: 'Brooklyn, New York' },
+            generatedAt: '2026-09-04T12:00:00Z',
+            timeRange: { start: '2026-09-01', end: '2026-09-04' },
+            itemCount: { entries: 3, completedConversations: 1, total: 4 },
+            metrics: {},
+            observations: ['Observation 1'],
+            suggestedInquiries: ['Prompt 1'],
+            type: 'patternshift',
           }),
         },
       ],
@@ -41,19 +40,20 @@ describe('PatternShift backend-owned read remediation', () => {
     const adminDb = {
       collection: vi.fn().mockReturnValue({
         doc: vi.fn().mockReturnValue({
-          collection: vi.fn().mockReturnValue({ get: mockGet }),
+          collection: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({ get: mockGet }),
+            }),
+          }),
         }),
       }),
     };
     vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue(adminDb as any);
 
-    const entries = await fetchUserEntriesForPatternShift('user_123');
+    const insight = await fetchLatestPatternShiftInsight('user_123');
 
-    expect(entries).toHaveLength(1);
-    expect(entries[0].id).toBe('entry_1');
-    expect(entries[0].content).toBe('A calm morning.');
-    expect(entries[0].location).toEqual({ label: 'Brooklyn, New York' });
-    // The uid is scoped to the caller's collection path
+    expect(insight).toBeDefined();
+    expect(insight!.id).toBe('insight_1');
     expect(adminDb.collection).toHaveBeenCalledWith('users');
   });
 
@@ -61,33 +61,41 @@ describe('PatternShift backend-owned read remediation', () => {
     const permissionErr: any = new Error('PERMISSION_DENIED: no Firestore IAM in sandbox');
     permissionErr.code = 7;
 
-    vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue({
+    const mockGet = vi.fn().mockRejectedValue(permissionErr);
+    const adminDb = {
       collection: vi.fn().mockReturnValue({
         doc: vi.fn().mockReturnValue({
           collection: vi.fn().mockReturnValue({
-            get: vi.fn().mockRejectedValue(permissionErr),
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({ get: mockGet }),
+            }),
           }),
         }),
       }),
-    } as any);
+    };
+    vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue(adminDb as any);
 
-    await expect(fetchUserEntriesForPatternShift('user_123')).rejects.toBeInstanceOf(
+    await expect(fetchLatestPatternShiftInsight('user_123')).rejects.toBeInstanceOf(
       BackendReadUnavailableError
     );
   });
 
   it('does NOT map arbitrary read errors to capability errors', async () => {
-    vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue({
+    const mockGet = vi.fn().mockRejectedValue(new Error('random backend bug'));
+    const adminDb = {
       collection: vi.fn().mockReturnValue({
         doc: vi.fn().mockReturnValue({
           collection: vi.fn().mockReturnValue({
-            get: vi.fn().mockRejectedValue(new Error('random backend bug')),
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({ get: mockGet }),
+            }),
           }),
         }),
       }),
-    } as any);
+    };
+    vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue(adminDb as any);
 
-    await expect(fetchUserEntriesForPatternShift('user_123')).rejects.toThrow('random backend bug');
+    await expect(fetchLatestPatternShiftInsight('user_123')).rejects.toThrow('random backend bug');
   });
 
   it('isAdminPermissionDeniedError only matches verified IAM permission failures', () => {
@@ -110,10 +118,8 @@ describe('PatternShift backend-owned read remediation', () => {
     ).rejects.toThrow('boom');
   });
 
-  it('verifies read functions accept ONLY the uid (no Firebase ID token argument)', () => {
-    // Signature assertions: callers cannot accidentally forward a token.
-    expect(fetchUserEntriesForPatternShift.length).toBe(1);
-    expect(fetchUserConversationsForPatternShift.length).toBe(1);
+  it('verifies fetchLatestPatternShiftInsight accepts ONLY the uid (no Firebase ID token argument)', () => {
+    // Signature assertion: callers cannot accidentally forward a token.
     expect(fetchLatestPatternShiftInsight.length).toBe(1);
   });
 });

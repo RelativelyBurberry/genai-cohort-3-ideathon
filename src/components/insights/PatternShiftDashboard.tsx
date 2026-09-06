@@ -542,7 +542,7 @@ export const PatternShiftDashboard: React.FC = () => {
       setErrorMessage(null);
       setPersistenceNotice(null);
       try {
-        const latest = await fetchLatestInsight(getIdToken);
+        const latest = await fetchLatestInsight(getIdToken, user?.uid);
         if (isMounted) {
           if (latest) {
             setInsight(latest);
@@ -597,8 +597,6 @@ export const PatternShiftDashboard: React.FC = () => {
           available: response.available,
           required: response.required,
         });
-      } else if (response.status === 'client_data_required') {
-        setPersistenceNotice(response.message);
       } else {
         setErrorMessage(response.message || 'Analysis failed.');
       }

@@ -6,8 +6,9 @@ import * as adminHelper from '../server/firebaseAdmin.js';
 import * as rateLimiter from '../server/services/rateLimiter.js';
 import * as geminiService from '../server/services/geminiService.js';
 import * as persistenceService from '../server/services/patternShiftPersistence.js';
+import { BackendReadUnavailableError } from '../server/services/privilegedPersistence.js';
 
-describe('Milestone 5 PatternShift Routes', () => {
+describe('Milestone 5 PatternShift Routes (client-read primary)', () => {
   let app: express.Express;
   let server: Server;
   let baseUrl: string;
@@ -49,6 +50,12 @@ describe('Milestone 5 PatternShift Routes', () => {
     }
   });
 
+  const validEntries = [
+    { id: 'e1', content: 'First entry about work stress.', moodRating: 2, tags: ['work', 'stress'], createdAt: '2026-09-01T10:00:00Z' },
+    { id: 'e2', content: 'Second entry about a creative side project.', moodRating: 5, tags: ['creativity', 'passion'], createdAt: '2026-09-02T10:00:00Z' },
+    { id: 'e3', content: 'Third entry about calm.', moodRating: 4, tags: ['mindfulness'], createdAt: '2026-09-03T10:00:00Z' },
+  ];
+
   describe('POST /api/patternshift/analyze', () => {
     it('returns 401 when Authorization header is missing', async () => {
       const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
@@ -75,6 +82,31 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(data.error).toBe('auth/invalid-token');
     });
 
+    it('returns 400 when analysisPayload is missing (client-read primary requires it)', async () => {
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        retryAfterSeconds: 0,
+        remaining: 9,
+        count: 1,
+        limit: 10,
+        resetTimeMs: Date.now() + 60000,
+      });
+
+      const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer valid_token',
+        },
+        body: JSON.stringify({}),
+      });
+
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.error).toBe('invalid_analysis_payload');
+      expect(data.message).toContain('analysisPayload is required');
+    });
+
     it('returns 429 when per-user rate limit is exceeded', async () => {
       vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
         allowed: false,
@@ -91,6 +123,9 @@ describe('Milestone 5 PatternShift Routes', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer valid_token',
         },
+        body: JSON.stringify({
+          analysisPayload: { entries: validEntries, completedConversations: [] },
+        }),
       });
 
       const data = await res.json();
@@ -110,17 +145,6 @@ describe('Milestone 5 PatternShift Routes', () => {
         resetTimeMs: Date.now() + 60000,
       });
 
-      // User has only 1 entry and 0 completed conversations
-      vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce([
-        {
-          id: 'e1',
-          content: 'My only reflection so far.',
-          moodRating: 3,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-      vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
-
       const geminiSpy = vi.spyOn(geminiService, 'generatePatternShiftInsights');
       const persistSpy = vi.spyOn(persistenceService, 'persistPatternShiftInsight');
 
@@ -130,6 +154,14 @@ describe('Milestone 5 PatternShift Routes', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer valid_token',
         },
+        body: JSON.stringify({
+          analysisPayload: {
+            entries: [
+              { id: 'e1', content: 'My only reflection so far.', moodRating: 3, createdAt: new Date().toISOString() },
+            ],
+            completedConversations: [],
+          },
+        }),
       });
 
       const data = await res.json();
@@ -143,7 +175,7 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(persistSpy).not.toHaveBeenCalled();
     });
 
-    it('executes analysis, invokes Gemini, and persists insight when >= 3 items exist', async () => {
+    it('executes analysis from the CLIENT PAYLOAD, invokes Gemini, and persists insight when >= 3 items exist', async () => {
       vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
         allowed: true,
         retryAfterSeconds: 0,
@@ -152,33 +184,6 @@ describe('Milestone 5 PatternShift Routes', () => {
         limit: 10,
         resetTimeMs: Date.now() + 60000,
       });
-
-      vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce([
-        {
-          id: 'e1',
-          content: 'First entry about work stress.',
-          moodRating: 2,
-          tags: ['work', 'stress'],
-          createdAt: '2026-09-01T10:00:00Z',
-        },
-        {
-          id: 'e2',
-          content: 'Second entry about a creative side project.',
-          moodRating: 5,
-          tags: ['creativity', 'passion'],
-          createdAt: '2026-09-02T10:00:00Z',
-        },
-      ]);
-
-      vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([
-        {
-          id: 'c1',
-          title: 'Deep dive on work balance',
-          status: 'completed',
-          summary: 'Explored sustainable pace and creative outlets.',
-          createdAt: '2026-09-03T10:00:00Z',
-        },
-      ]);
 
       const geminiSpy = vi
         .spyOn(geminiService, 'generatePatternShiftInsights')
@@ -201,6 +206,19 @@ describe('Milestone 5 PatternShift Routes', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer valid_token',
         },
+        body: JSON.stringify({
+          analysisPayload: {
+            entries: validEntries,
+            completedConversations: [
+              {
+                id: 'c1',
+                title: 'Deep dive on work balance',
+                summary: 'Explored sustainable pace and creative outlets.',
+                createdAt: '2026-09-03T10:00:00Z',
+              },
+            ],
+          },
+        }),
       });
 
       const data = await res.json();
@@ -209,7 +227,7 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(data.insight).toBeDefined();
       expect(data.insight.observations).toHaveLength(1);
       expect(data.insight.suggestedInquiries).toHaveLength(1);
-      expect(data.insight.itemCount.total).toBe(3);
+      expect(data.insight.itemCount.total).toBe(4);
 
       expect(geminiSpy).toHaveBeenCalledTimes(1);
       // SECURITY: persistPatternShiftInsight is called WITHOUT a user token
@@ -227,13 +245,6 @@ describe('Milestone 5 PatternShift Routes', () => {
         resetTimeMs: Date.now() + 60000,
       });
 
-      vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce([
-        { id: 'e1', content: 'First entry.', moodRating: 3, createdAt: '2026-09-01T10:00:00Z' },
-        { id: 'e2', content: 'Second entry.', moodRating: 4, createdAt: '2026-09-02T10:00:00Z' },
-        { id: 'e3', content: 'Third entry.', moodRating: 5, createdAt: '2026-09-03T10:00:00Z' },
-      ]);
-      vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([]);
-
       // Reproduce the runtime failure: secret provider cannot supply the key.
       vi.spyOn(geminiService, 'generatePatternShiftInsights').mockRejectedValueOnce(
         new Error('GEMINI_CONFIGURATION_ERROR: GEMINI_API_KEY could not be retrieved from secret provider.')
@@ -246,6 +257,9 @@ describe('Milestone 5 PatternShift Routes', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer valid_token',
         },
+        body: JSON.stringify({
+          analysisPayload: { entries: validEntries, completedConversations: [] },
+        }),
       });
       const data = await res.json();
 
@@ -267,19 +281,6 @@ describe('Milestone 5 PatternShift Routes', () => {
         resetTimeMs: Date.now() + 60000,
       });
 
-      vi.spyOn(persistenceService, 'fetchUserEntriesForPatternShift').mockResolvedValueOnce([
-        { id: 'e7', content: 'Oldest entry.', moodRating: 2, tags: ['self-awareness', 'patterns'], location: { latitude: 48.8566, longitude: 2.3522, label: 'Paris, France' }, createdAt: '2026-08-30T07:30:00Z' },
-        { id: 'e6', content: 'Down day.', moodRating: 2, tags: ['stress', 'coping'], createdAt: '2026-09-05T15:00:00Z' },
-        { id: 'e5', content: 'Calm evening.', moodRating: 5, tags: ['evening', 'mindfulness', 'peace'], location: { latitude: 51.5074, longitude: -0.1278, label: 'London, United Kingdom' }, createdAt: '2026-09-06T18:50:00Z' },
-        { id: 'e4', content: 'Grateful.', moodRating: 4, tags: ['gratitude', 'small-moments', 'wellbeing'], location: { latitude: 40.7128, longitude: -74.006, label: 'Brooklyn, New York' }, createdAt: '2026-09-10T19:15:00Z' },
-        { id: 'e3', content: 'Night thoughts.', moodRating: 4, tags: ['boundaries', 'courage', 'self-compassion'], createdAt: '2026-09-12T01:30:00Z' },
-        { id: 'e2', content: 'Boundaries at work.', moodRating: 3, tags: ['work', 'boundaries', 'stress'], createdAt: '2026-09-12T22:30:00Z' },
-        { id: 'e1', content: 'Recent reflection.', moodRating: 4, tags: ['mindfulness', 'gratitude', 'evening'], location: { latitude: 40.7128, longitude: -74.006, label: 'Brooklyn, New York' }, createdAt: '2026-09-13T21:15:00Z' },
-      ]);
-      vi.spyOn(persistenceService, 'fetchUserConversationsForPatternShift').mockResolvedValueOnce([
-        { id: 'c1', title: 'Reflecting', status: 'completed', summary: 'Explored calm.', createdAt: '2026-09-10T18:40:00Z' },
-      ]);
-
       vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce({
         observations: ['A gentle observation.'],
         suggestedInquiries: ['A gentle question?'],
@@ -292,6 +293,22 @@ describe('Milestone 5 PatternShift Routes', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer valid_token',
         },
+        body: JSON.stringify({
+          analysisPayload: {
+            entries: [
+              { id: 'e7', content: 'Oldest entry.', moodRating: 2, tags: ['self-awareness', 'patterns'], location: { label: 'Paris, France' }, createdAt: '2026-08-30T07:30:00Z' },
+              { id: 'e6', content: 'Down day.', moodRating: 2, tags: ['stress', 'coping'], createdAt: '2026-09-05T15:00:00Z' },
+              { id: 'e5', content: 'Calm evening.', moodRating: 5, tags: ['evening', 'mindfulness', 'peace'], location: { label: 'London, United Kingdom' }, createdAt: '2026-09-06T18:50:00Z' },
+              { id: 'e4', content: 'Grateful.', moodRating: 4, tags: ['gratitude', 'small-moments', 'wellbeing'], location: { label: 'Brooklyn, New York' }, createdAt: '2026-09-10T19:15:00Z' },
+              { id: 'e3', content: 'Night thoughts.', moodRating: 4, tags: ['boundaries', 'courage', 'self-compassion'], createdAt: '2026-09-12T01:30:00Z' },
+              { id: 'e2', content: 'Boundaries at work.', moodRating: 3, tags: ['work', 'boundaries', 'stress'], createdAt: '2026-09-12T22:30:00Z' },
+              { id: 'e1', content: 'Recent reflection.', moodRating: 4, tags: ['mindfulness', 'gratitude', 'evening'], location: { label: 'Brooklyn, New York' }, createdAt: '2026-09-13T21:15:00Z' },
+            ],
+            completedConversations: [
+              { id: 'c1', title: 'Reflecting', summary: 'Explored calm.', createdAt: '2026-09-10T18:40:00Z' },
+            ],
+          },
+        }),
       });
       const data = await res.json();
 
@@ -310,7 +327,7 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(JSON.stringify(data.insight.metrics)).not.toContain('Brooklyn');
     });
 
-    it('strictly isolates data lookup by verified token UID and ignores body tampering', async () => {
+    it('derives identity ONLY from the verified token and ignores body uid tampering', async () => {
       vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
         allowed: true,
         retryAfterSeconds: 0,
@@ -320,12 +337,13 @@ describe('Milestone 5 PatternShift Routes', () => {
         resetTimeMs: Date.now() + 60000,
       });
 
-      const fetchEntriesSpy = vi
-        .spyOn(persistenceService, 'fetchUserEntriesForPatternShift')
-        .mockResolvedValueOnce([]);
-      const fetchConvsSpy = vi
-        .spyOn(persistenceService, 'fetchUserConversationsForPatternShift')
-        .mockResolvedValueOnce([]);
+      vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce({
+        observations: ['A gentle observation.'],
+        suggestedInquiries: ['A gentle question?'],
+      });
+      const persistSpy = vi
+        .spyOn(persistenceService, 'persistPatternShiftInsight')
+        .mockResolvedValueOnce(undefined);
 
       await fetch(`${baseUrl}/api/patternshift/analyze`, {
         method: 'POST',
@@ -334,13 +352,66 @@ describe('Milestone 5 PatternShift Routes', () => {
           Authorization: 'Bearer valid_token', // user_123
         },
         body: JSON.stringify({
+          analysisPayload: { entries: validEntries, completedConversations: [] },
           uid: 'victim_user_999', // Attack payload trying to override UID
         }),
       });
 
-      // Verification: Lookups are strictly for user_123
-      expect(fetchEntriesSpy).toHaveBeenCalledWith('user_123');
-      expect(fetchConvsSpy).toHaveBeenCalledWith('user_123');
+      // Verification: persistence is scoped strictly to the verified token uid
+      expect(persistSpy).toHaveBeenCalledWith('user_123', expect.anything());
+    });
+
+    it('performs ZERO backend Firestore reads during analysis', async () => {
+      vi.spyOn(rateLimiter, 'checkAndIncrementRateLimit').mockResolvedValueOnce({
+        allowed: true,
+        retryAfterSeconds: 0,
+        remaining: 9,
+        count: 1,
+        limit: 10,
+        resetTimeMs: Date.now() + 60000,
+      });
+
+      vi.spyOn(geminiService, 'generatePatternShiftInsights').mockResolvedValueOnce({
+        observations: ['Obs'],
+        suggestedInquiries: ['Q'],
+      });
+      vi.spyOn(persistenceService, 'persistPatternShiftInsight').mockResolvedValueOnce(undefined);
+
+      const latestReadSpy = vi.spyOn(persistenceService, 'fetchLatestPatternShiftInsight');
+
+      const firestoreGetSpy = vi.fn().mockRejectedValue(new Error('UNEXPECTED FIRESTORE READ'));
+      const mockDb = {
+        collection: vi.fn().mockReturnValue({
+          doc: vi.fn().mockReturnValue({
+            collection: vi.fn().mockReturnValue({
+              doc: vi.fn().mockReturnValue({
+                set: vi.fn().mockResolvedValue(undefined),
+                get: firestoreGetSpy,
+              }),
+              get: firestoreGetSpy,
+              orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ get: firestoreGetSpy }) }),
+            }),
+            get: firestoreGetSpy,
+          }),
+          get: firestoreGetSpy,
+        }),
+      };
+      vi.spyOn(adminHelper, 'getAdminDb').mockReturnValue(mockDb as any);
+
+      const res = await fetch(`${baseUrl}/api/patternshift/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer valid_token',
+        },
+        body: JSON.stringify({
+          analysisPayload: { entries: validEntries, completedConversations: [] },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(latestReadSpy).not.toHaveBeenCalled();
+      expect(firestoreGetSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -401,6 +472,23 @@ describe('Milestone 5 PatternShift Routes', () => {
       expect(data.insight).toBeNull();
       expect(persistenceService.fetchLatestPatternShiftInsight).toHaveBeenCalledWith('user_123');
     });
-  });
 
+    it('returns null insight gracefully when backend Firestore read IAM is unavailable', async () => {
+      vi.spyOn(persistenceService, 'fetchLatestPatternShiftInsight').mockRejectedValueOnce(
+        new BackendReadUnavailableError('fetchLatestPatternShiftInsight')
+      );
+
+      const res = await fetch(`${baseUrl}/api/patternshift/latest`, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer valid_token',
+        },
+      });
+
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.status).toBe('success');
+      expect(data.insight).toBeNull();
+    });
+  });
 });
