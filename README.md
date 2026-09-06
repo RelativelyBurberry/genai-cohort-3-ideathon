@@ -65,6 +65,10 @@ Mood Constellation is intentionally deterministic and privacy-conscious:
 
 Connections are derived from explainable signals such as **shared normalized tags and temporal proximity**.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/595d1694-71fb-4585-a04f-50fabd03c2fd" alt="Reflectra Mood Constellation animation" width="50%" />
+</p>
+
 ---
 
 # ✦ PatternShift Intelligence
@@ -98,6 +102,11 @@ Its analysis layer is built around deterministic metrics and evidence structures
 - the reasoning behind an observed pattern
 
 Gemini is used to help articulate observations from sanitized analytical context — **not as a replacement for the underlying evidence layer**.
+
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2e5a218a-a740-4f92-8bc3-5faf85dd2b8b" alt="Reflectra Mood Constellation animation" width="50%" />
+</p>
 
 ---
 
@@ -198,6 +207,10 @@ Guided multi-turn conversations provide a structured reflection experience while
 
 Conversations and journal entries become part of a broader longitudinal workspace, allowing insights to develop across time instead of existing as isolated interactions.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4a3e3003-17e7-4493-bd47-7a2d2ef425e1" alt="Reflectra Mood Constellation animation" width="50%" />
+</p>
+
 ---
 
 # ✦ External Notifications
@@ -218,6 +231,11 @@ The notification architecture maintains strict identity separation:
 - authorization allowlists are not reused for notification routing
 - background jobs fall back safely to owner profile data
 - persistence operations handle constrained backend environments gracefully
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/fa8dca18-16ba-4128-b085-bbb2ecfde9d3" alt="Reflectra Mood Constellation animation" width="50%" />
+</p>
+
 
 ---
 
