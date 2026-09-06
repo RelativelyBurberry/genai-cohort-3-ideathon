@@ -14,6 +14,7 @@ import {
   validatePatternShiftAnalysisPayload,
   PATTERN_ANALYSIS_PAYLOAD_LIMITS,
 } from '../services/patternShiftPayload.js';
+import { dispatchPatternShiftReady } from '../services/notificationIntegrationService.js';
 
 export const patternShiftRouter = Router();
 
@@ -165,6 +166,13 @@ patternShiftRouter.post(
         console.log('[PATTERNSHIFT RESPONSE SHAPE] 200 success (persisted: true)', {
           insightId: newInsight.id,
         });
+
+        // Phase 14: Dispatch to external notification channels (non-blocking)
+        // Fire-and-forget; delivery failures are isolated
+        dispatchPatternShiftReady(uid).catch((err) => {
+          console.warn('[PATTERNSHIFT] External channel dispatch failed (non-fatal):', err?.message);
+        });
+
         res.status(200).json({
           status: 'success',
           insight: newInsight,

@@ -196,6 +196,16 @@ export const SmartNudgeProvider: React.FC<SmartNudgeProviderProps> = ({
             recordNotificationDelivered(uidRef.current, now).catch(() => {
               // Non-fatal: if persistence fails we still don't spam the UI.
             });
+
+            // Phase 14: Dispatch to external channels (non-blocking)
+            // Fire-and-forget; delivery failures are isolated
+            fetch('/api/integrations/dispatch/smart-nudge', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason: nudge.type }),
+            }).catch(() => {
+              // Non-fatal: external channel failures are isolated
+            });
           }
           return;
         }

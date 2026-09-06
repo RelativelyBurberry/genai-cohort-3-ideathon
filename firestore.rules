@@ -170,6 +170,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // 8. Discord Webhook Secrets (Phase 14 — BACKEND-ONLY)
+    // Discord webhook URLs are stored here. Clients CANNOT read or write
+    // this path. The backend Admin SDK manages webhook URLs and returns
+    // only masked hints (last 4 characters) to the client.
+    match /users/{userId}/secrets/{secretId} {
+      // NO client access - backend Admin SDK only
+      allow read, write: if false;
+    }
+
     // Default Deny for all other documents
     match /{document=**} {
       allow read, write: if false;

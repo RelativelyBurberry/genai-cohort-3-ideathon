@@ -9,7 +9,9 @@ import { requireAuth, AuthenticatedRequest, logAuthConfigStartup } from './serve
 import { reflectionRouter } from './server/routes/reflection.js';
 import { patternShiftRouter } from './server/routes/patternShift.js';
 import { adminRouter } from './server/routes/admin.js';
+import { integrationsRouter } from './server/routes/integrations.js';
 import { initializeSecretProvider } from './server/config/secrets.js';
+import { initializeEmailProvider } from './server/services/emailDeliveryService.js';
 
 // Make debug logs visible to inspection
 const origLog = console.log;
@@ -41,6 +43,9 @@ console.error = (...args: any[]) => {
 
 // Initialize secret provider at startup
 initializeSecretProvider();
+
+// Initialize email provider for Phase 14
+initializeEmailProvider();
 
 const app = express();
 const PORT = 3000;
@@ -110,6 +115,9 @@ app.use(patternShiftRouter);
 
 // 5. Phase 11 RBAC & Administrative Controls Routes
 app.use(adminRouter);
+
+// 6. Phase 14 External Notification Channels & Integrations Routes
+app.use(integrationsRouter);
 
 // Temporary diagnostic collector to record frontend telemetry
 app.post('/api/dev/client-debug', (req, res) => {

@@ -21,6 +21,7 @@ import {
   toBackendPersistenceApiResponse,
   BACKEND_PERSISTENCE_UNAVAILABLE,
 } from '../services/privilegedPersistence.js';
+import { dispatchReflectionCompleted } from '../services/notificationIntegrationService.js';
 
 export const reflectionRouter = Router();
 
@@ -567,6 +568,12 @@ reflectionRouter.post('/api/conversations/:id/summarize', requireAuth, async (re
     //   failure), never to auth failures, Gemini failures, or
     //   arbitrary errors — those still fail closed.
     await completeAndSummarizeConversation(uid, conversationId, summary, undefined);
+
+    // Phase 14: Dispatch to external notification channels (non-blocking)
+    // Fire-and-forget; delivery failures are isolated
+    dispatchReflectionCompleted(uid).catch((err) => {
+      console.warn('[REFLECTION_SUMMARIZE] External channel dispatch failed (non-fatal):', err?.message);
+    });
 
     res.status(200).json({
       status: 'success',
